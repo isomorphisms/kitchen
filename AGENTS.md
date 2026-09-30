@@ -7,26 +7,105 @@ best available knowledge of the target system and the user's conventions.
 
 ## Mandatory flow
 
+Kitchen is not a place to improvise a runnable script and then invent tests for
+it afterward. The evidence should grow from the intended behavior.
+
 1. **Identify the target context.** Name the exact machine and execution context:
    Termux, `adb shell`, Shizuku/rish, root, SDF, GitHub runner, or another host.
-2. **Load known facts.** Read the applicable files under `systems/`, `user/`,
+2. **State the requirements before implementing.** Write down what the command or
+   script must do, what it must not do, what inputs and state it expects, and
+   what observable postconditions would count as success. Requirements should be
+   concrete enough that a test can disagree with the implementation.
+3. **Load known facts.** Read the applicable files under `systems/`, `user/`,
    and `shells/`. Treat dated observations as observations, not eternal truths.
-3. **Resolve unknowns with read-only probes.** Never replace an unknown path,
-   permission, shell feature, package, mount, or executable with a generic Unix
-   guess.
-4. **Build or select fixtures.** Reproduce the relevant filesystem/input/process
-   state under `fixtures/` when practical.
-5. **Test before serving.** Exercise the successful case and relevant failure,
-   rerun, quoting, path, and permission cases under `tests/`.
-6. **Preflight the exact command.** Check sources, destinations, current-directory
-   independence, shell syntax, privilege boundary, and destructive effects.
-7. **Serve the smallest mutation.** Prefer one state change followed by a
-   verification over a large blind block.
-8. **Verify the postcondition.** A zero exit status is not sufficient evidence
-   when the intended state can be checked directly.
+4. **Resolve unknowns with read-only probes.** Never replace an unknown path,
+   permission, shell feature, package, mount, executable, input format, or other
+   environmental fact with a generic Unix guess.
+5. **Write tests from the requirements.** Before trusting the implementation,
+   turn each important requirement into one or more tests. Include negative
+   requirements: things the script must refuse, preserve, or leave unchanged.
+6. **Build fixtures for those tests.** Reproduce the relevant
+   filesystem/input/process state under `fixtures/` when practical. Fixtures are
+   evidence, not decoration: each should have a reason to exist and an expected
+   outcome.
+7. **Review the fixtures before running the candidate.** Ask whether the fixtures
+   actually exercise the stated requirement and the failure that motivated the
+   work. A test that passes on an irrelevant or too-friendly fixture proves
+   little. Fix weak fixtures before treating their results as evidence.
+8. **Implement a versioned candidate.** Keep materially distinct attempts rather
+   than erasing the path by which the script was produced. A task may look like:
+
+       scripts/parse-a-mailbox/in-mbox-format/
+           1.py
+           2.py
+           3.py
+
+   Use the natural source suffix for the language rather than assuming Python.
+9. **Run the tests on the fixtures.** Exercise the successful case and relevant
+   failure, rerun, quoting, path, permission, malformed-input, partial-state, and
+   interruption cases that apply. Record enough about the run that a later agent
+   can tell what was actually tested.
+10. **Attack the candidate.** After the ordinary tests, deliberately think about
+    how the script could be wrong even while those tests pass. Add aggressive
+    fixtures for those possibilities and rerun. Important discoveries should
+    become permanent regression cases rather than one-off thoughts.
+11. **Preflight the exact command.** Check sources, destinations,
+    current-directory independence, shell syntax, privilege boundary,
+    destructive effects, and whether repeated execution is safe when it is
+    supposed to be.
+12. **Serve the smallest mutation.** Prefer one state change followed by a
+    verification over a large blind block.
+13. **Verify the postcondition.** A zero exit status is not sufficient evidence
+    when the intended state can be checked directly.
+14. **Preserve what was learned.** Do not clean up a failed or misleading attempt
+    so thoroughly that the failure becomes invisible. Keep the script version,
+    the fixture that exposed it, the test, and a short account of the failure.
 
 If a required assumption cannot be established, serve a read-only probe instead
 of a guessed mutation.
+
+## Version and failure record
+
+The numbered script versions are part of Kitchen's evidence. Once a numbered
+version has been tested, served, or otherwise become evidence, do not silently
+rewrite its history. Make the next numbered version for a materially changed
+attempt.
+
+When a numbered version exposes a bug, bad assumption, misleading success, or
+other useful failure, add a companion Markdown note beginning with the same
+version number and a short human-readable description. For example:
+
+    scripts/parse-a-mailbox/in-mbox-format/
+        1.py
+        1 confused arguments with vectors.md
+        2.py
+
+The exact suffix is less important than the stable link to version `1` and a
+description useful to a human scanning the directory.
+
+A failure note should record, when known:
+
+- the requirements that version was intended to satisfy;
+- when the attempt and observations were made;
+- the target system and relevant assumptions;
+- what was tried;
+- which tests and fixtures were used;
+- what went right;
+- what went wrong;
+- how the failure was observed;
+- whether the problem was in the implementation, requirement, test, fixture, or
+  an assumption about the environment;
+- what changed in the next attempt; and
+- any new regression fixture or test created from the failure.
+
+Do not record only failures. A version that succeeded for a non-obvious reason,
+or that revealed a useful constraint, can have the same kind of note.
+
+This history is deliberately machine-inspectable. Future tools should be able
+to walk requirements, tests, fixtures, numbered attempts, and failure notes;
+look for recurring failure patterns; and propose improvements to Kitchen's own
+procedure. Prefer regular local structure and explicit evidence over prose that
+exists only in a chat.
 
 ## Source-of-truth boundaries
 

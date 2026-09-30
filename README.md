@@ -18,6 +18,7 @@ The working split is:
 - [`fixtures/`](fixtures/README.md) — disposable states used to exercise commands and scripts;
 - [`tests/`](tests/README.md) — executable checks and regression cases;
 - [`incidents/`](incidents/README.md) — escaped mistakes that should become durable regressions;
+- [`bad-script-examples/`](bad-script-examples/README.md) — preserved failures and regression seeds, not setup recipes;
 - [`sources/`](sources/README.md) — provenance and links to upstream facts such as Cat Food.
 
 Start with [AGENTS.md](AGENTS.md).
@@ -30,7 +31,9 @@ Use `assumptions/` to distinguish what is known, preferred, required or unknown;
 use `sources/` to retain provenance and `probes/` to resolve mutable facts.
 Prepare disposable inputs under `fixtures/`, test the intended result under
 `tests/`, and apply `preflight/` to the exact command before serving it. Escaped
-mistakes belong in `incidents/` with links to their regression work.
+mistakes belong in `incidents/` with links to their regression work. Preserved
+bad specimens and case-specific failure accounts live in `bad-script-examples/`;
+their presence is not a claim that executable regression tests already exist.
 
 A preference for `~/opt/bin` does not prove that directory exists on every host.
 Likewise, choosing Bash or Grease/YSH does not identify the operating system or
