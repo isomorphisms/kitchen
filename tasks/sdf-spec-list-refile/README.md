@@ -112,6 +112,14 @@ policy, insufficient permissions, or insufficient workspace.
 
 ## Current status
 
-The Idriç six-header selection policy and shared SPEC-LIST fixture are green.
-The bounded-memory file scanner is being promoted through CI. Destructive copy,
-journal/recovery and source replacement are not yet promoted.
+Stages 1 and 2 are green in Idriç:
+
+- the exact six-header selection policy passes the 14-message shared fixture;
+- body-only and wrong-header negatives pass;
+- the full mbox framing + selection composition passes;
+- the bounded-memory binary file scanner compiles and reads the shared mailbox
+  through real file I/O, reporting exactly nine selected occurrences.
+
+Destructive copy, journal/recovery and source replacement are not yet promoted.
+The live SDF move remains blocked on those transaction tests and the read-only
+SDF locking/permission preflight.
