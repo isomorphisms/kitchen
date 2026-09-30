@@ -23,6 +23,13 @@ for command in lockf flock mail.local dotlock stat mv cp sync; do
     fi
 done
 
+printf '%s\n' '== local delivery locking policy if Postfix exposes it =='
+if command -v postconf >/dev/null 2>&1; then
+    postconf -h mailbox_delivery_lock 2>&1 || :
+else
+    printf '%s\n' 'postconf MISSING'
+fi
+
 printf '%s\n' '== permissions inferred without mutation =='
 if [ -r /var/mail/isomorphisms ]; then
     printf '%s\n' 'source-readable=yes'
