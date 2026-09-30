@@ -33,7 +33,7 @@ The history sweep currently reaches July 2025.
 - `powershell-static-ip-positional/` — July 2025; recovered assistant code let a one-argument IP address bind as the interface name and left the IP parameter empty;
 - `powershell-dhcp-no-elevation-preflight/` — July 2025; privileged network changes began before required rights were established;
 - `shared-storage-assumption/` — December 2025; shared mobile storage was used before its availability/access was established;
-- `revision-abbreviation/` — August 2026; a shortened revision identifier was reused across a source-control boundary where it was not valid;
+- `abbreviated-git-fetch/` — August 2026; an abbreviated commit ID was used where the remote operation required a real ref;
 - `tracking-reference-assumption/` — August 2026; successful retrieval was mistaken for proof that the local tracking reference needed next existed;
 - `termux-debian-confusion/` — August 2026; Termux, a rootless Linux environment, Android shell and root were treated as interchangeable;
 - `container-layout-assumption/` — August 2026; a conventional container home was substituted for the build image's required absolute layout;
