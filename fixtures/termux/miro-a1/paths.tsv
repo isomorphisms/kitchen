@@ -1,0 +1,7 @@
+status	path	meaning	source
+preference	~/opt/bin	preferred private executable directory	user + Cat Food
+observed	~/storage/shared/Shizuku	Shizuku exported terminal files	Cat Food 2026-09-29
+observed	~/opt/Shizuku	convenience symlink to shared Shizuku directory	Cat Food 2026-09-29
+observed	~/storage/downloads	Android shared Downloads view	Cat Food
+mutable	~/storage/external-1	previously observed removable storage; reverify before use	Cat Food
+forbidden-assumption	~/bin	must not be invented as the rish location	Kitchen incident regression
