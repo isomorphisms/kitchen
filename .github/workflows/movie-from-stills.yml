@@ -1,0 +1,33 @@
+name: Movie from stills
+
+on:
+  pull_request:
+    paths:
+      - "tasks/movie-from-stills/**"
+      - "tests/movie-from-stills.sh"
+      - ".github/workflows/movie-from-stills.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "tasks/movie-from-stills/**"
+      - "tests/movie-from-stills.sh"
+      - ".github/workflows/movie-from-stills.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact Kitchen source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Test canonical movie assembly
+        run: sh tests/movie-from-stills.sh
