@@ -126,6 +126,18 @@ exists only in a chat.
 - Keep system facts separate from user preferences. A preference is not proof of
   machine state, and machine state is not permission to override a preference.
 
+## GitHub Connector repository access
+
+When ChatGPT/Codex can authenticate to GitHub but a repository is invisible or
+writes fail, especially after a new organization is created or a repository is
+transferred, use the canonical procedure in
+`tasks/github-chatgpt-codex-connector-access/README.md`.
+
+Do not infer GitHub App access from the user's ordinary repository `push` or
+`admin` permissions, and do not treat reconnecting the GitHub identity as a
+substitute for installing/configuring the ChatGPT Codex Connector on the actual
+repository owner.
+
 ## Canonical movie assembly
 
 For mathematical visualization movies built from generated stills, use
