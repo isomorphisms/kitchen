@@ -125,3 +125,21 @@ exists only in a chat.
   explicit verified paths.
 - Keep system facts separate from user preferences. A preference is not proof of
   machine state, and machine state is not permission to override a preference.
+
+## Canonical movie assembly
+
+For mathematical visualization movies built from generated stills, use
+`tasks/movie-from-stills/build.sh` as the canonical assembly command.
+
+The producing repository owns mathematical state evolution, camera/control
+trajectories, and still rendering. It should write a numbered still sequence
+beginning at frame zero. Kitchen owns the ordinary FFmpeg assembly step.
+
+Do not introduce a project-local movie-encoding library, Python `movie.py`
+wrapper, raw-RGB streaming protocol, or hand-built MP4 encoder merely to turn
+those stills into a movie. Keeping the numbered PNG/PNM/PPM files alongside the
+movie is acceptable when the producing repository wants them as artifacts.
+
+If the canonical command needs another codec, container, audio rule, or timing
+feature, change and test the Kitchen task rather than creating a divergent
+project-local encoder.
