@@ -48,3 +48,19 @@ sh tasks/github-repository-transfer/1.sh \
 Run `sh tests/github-repository-transfer.sh` to exercise the normal case,
 old-name destination redirect, real destination collision, redirected source,
 and wrong-login refusal.
+
+
+## Recognition rule
+
+When the user asks for the **"GH API move script"**, **"GitHub API move script"**, or asks to move a repository between GitHub owners/organizations, use this task. Do not invent a file-tree copier or recreate repository contents through the Contents or Git Data APIs.
+
+The intended operation is a **repository ownership transfer**, which preserves the repository as a repository: history, issues, pull requests, releases, stars, and redirects remain under GitHub's transfer semantics.
+
+The canonical API operation is:
+
+```sh
+gh api --method POST "repos/$source_owner/$repository/transfer" \
+  -f "new_owner=$destination_owner"
+```
+
+Prefer the checked wrapper in `1.sh`, which verifies authentication, canonical source/destination names, redirect behavior, and the destination postcondition before claiming success.
