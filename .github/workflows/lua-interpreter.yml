@@ -1,0 +1,35 @@
+name: Lua interpreter
+
+on:
+  pull_request:
+    paths:
+      - "tasks/lua-interpreter/**"
+      - "tests/lua-interpreter.sh"
+      - "sources/lua.md"
+      - ".github/workflows/lua-interpreter.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "tasks/lua-interpreter/**"
+      - "tests/lua-interpreter.sh"
+      - "sources/lua.md"
+      - ".github/workflows/lua-interpreter.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact Kitchen source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Ensure build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl ca-certificates
+
+      - name: Build and test pinned Lua interpreter
+        run: sh tests/lua-interpreter.sh
