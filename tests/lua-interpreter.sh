@@ -35,7 +35,7 @@ printf 'PASS idempotent reinstall\n'
 
 protected=$tmp/protected
 mkdir -p "$protected/bin"
-printf '#!/bin/sh\nprintf "%s\\n" sentinel\n' > "$protected/bin/lua"
+printf '#!/bin/sh\nprintf "%%s\\n" sentinel\n' > "$protected/bin/lua"
 chmod 755 "$protected/bin/lua"
 set +e
 sh "$installer" "$protected" >"$tmp/protected.out" 2>&1
