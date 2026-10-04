@@ -21,3 +21,13 @@ The working split is:
 - `sources/` — provenance and links to upstream facts such as Cat Food.
 
 Start with `AGENTS.md`.
+
+## Source-pinned phone test handoffs
+
+Read [the IB handoff incident](incidents/2026-10-04-ib-unmaterialized-handoff.md)
+before serving a checkout-dependent phone test. The
+[versioned IB baseline task](tasks/ib-durable-store/README.md) preserves existing
+checkouts, verifies source and blob identities, and keeps the passing old baseline
+separate from the unavailable E2 repair. Its executable regression covers failed
+context discovery, repeated execution, and login-shell preservation; Cat Food
+owns verified checkout lookup and the dated phone observation.
