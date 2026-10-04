@@ -1,0 +1,12 @@
+schema	source-handoff-v1
+repository	https://github.com/isomorphisms/IB.git
+source	f1f22778fb66f7219c13ba864c13b03be10cfea8
+entry	tests/test_durable_object_store.grease
+context	posix-sh-existing-checkout
+mutation	temporary-only-reviewed-test
+rerun	reuse-verified-checkout
+scope	ordinary-file-baseline
+excluded	E2-no-replace-concurrent-publication;new-physical-device-evidence;follower-acceptance
+marker	durable ordinary-file store tests: ok
+file	lib/durable_object_store.grease	bdabc03428d7e7d9b7f098b3dc61321798d9dc74
+file	tests/test_durable_object_store.grease	b7147483cea50e095193e7e59609091efe2a3aa4

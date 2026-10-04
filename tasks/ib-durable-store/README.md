@@ -3,7 +3,10 @@
 Read `requirements.md`, the incident at
 `../../incidents/2026-10-04-ib-unmaterialized-handoff.md`, and Cat Food's
 `docs/help/ib.md` before serving a command. `baseline.lock` pins the source and
-two blobs that the user actually tested. Version `2.sh` is the current candidate.
+two blobs that the user actually tested. Version `2.sh` is historical evidence.
+New handoffs use `handoff.tsv` with the shared `../source-handoff/1.sh` gate.
+Read its requirements and README before emission; request the exact scope
+`ordinary-file-baseline`. Any E2 scope must be refused.
 
 Invoke the versioned script with one explicit, reverified IB checkout path using
 `sh`. It locates its lock beside itself; the caller's working directory is

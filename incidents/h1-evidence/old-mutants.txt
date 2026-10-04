@@ -1,0 +1,22 @@
+Evidence class: host reproduction, not physical-device evidence.
+
+Cat Food original source c6eb0468983551bd2f6eb3bac4d392da7ef6d75a:
+Run expanded ib-handoff regression against an isolated worktree of that source.
+Cases 1-9 pass. Case 10 exits 1:
+mutant escaped: inherited GIT_DIR authenticated the wrong checkout
+Repaired entrypoint rejects registration and leaves the registry unchanged.
+
+Kitchen unchanged tasks/ib-durable-store/2.sh, blob
+2236d6780b1f6257ac2411d35cf43d631d1c77c4:
+Use a disposable clone containing the actual IB baseline but literal origin
+https://github.com/unrelated/IB.git. Set GIT_CONFIG_COUNT=1,
+GIT_CONFIG_KEY_0=url.https://github.com/isomorphisms/IB.git.insteadOf,
+GIT_CONFIG_VALUE_0=https://github.com/unrelated/IB.git.
+Old runner exits 0 and prints baseline=PASS, e2=NOT_RUN.
+Shared gate with the same environment exits 1 before emission:
+BLOCKED stage=origin checkout belongs to another or ambiguous repository
+
+An earlier attempted mutant adding remote.origin.url via GIT_CONFIG_COUNT did
+not reproduce this defect: get-url selected the first local origin. It was not
+counted as old-system acceptance. The regression now uses the actual insteadOf
+URL-rewrite defect that was reproduced above.

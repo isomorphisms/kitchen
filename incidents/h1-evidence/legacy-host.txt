@@ -1,0 +1,23 @@
+ok 1 - explicit path with spaces from outside Git
+ok 2 - second run reuses existing checkout
+ok 3 - committed blobs used; dirty work and HEAD preserved
+ok 4 - missing argument fails before Git
+ok 5 - missing directory is not a missing commit
+ok 6 - partial checkout remains untouched
+ok 7 - nested directory cannot borrow its parent checkout identity
+ok 8 - wrong origin rejected
+ok 9 - IB SSH origin accepted
+ok 10 - unavailable exact source blocks before execution
+ok 11 - wrong test blob blocks before execution
+ok 12 - moving or incomplete pins rejected
+ok 13 - different current HEAD does not force a branch switch
+ok 14 - false-green output cannot hide test failure
+ok 15 - zero exit alone is not a baseline receipt
+ok 16 - syntax failure is separate from runtime failure
+ok 17 - Git replacement cannot substitute the pinned source
+ok 18 - inherited Git directory cannot redirect source checks
+ok 19 - missing test at pinned source is not a runtime failure
+ok 20 - linked worktree with a .git file is accepted
+ok 21 - interrupted Git checkout is not treated as an absent commit
+ok 22 - failure leaves parent shell alive
+ib handoff regression cases: 22 passed

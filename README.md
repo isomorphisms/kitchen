@@ -31,3 +31,7 @@ checkouts, verifies source and blob identities, and keeps the passing old baseli
 separate from the unavailable E2 repair. Its executable regression covers failed
 context discovery, repeated execution, and login-shell preservation; Cat Food
 owns verified checkout lookup and the dated phone observation.
+
+New source-test handoffs use the shared [producer gate](tasks/source-handoff/README.md).
+It verifies fresh source materialization before emitting a digest-bound command;
+consumer execution remains read-only and acceptance stays scope-specific.
