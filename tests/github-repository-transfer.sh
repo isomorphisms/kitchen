@@ -22,7 +22,14 @@ set -eu
 state=${FAKE_GH_STATE:?}
 scenario=${FAKE_GH_SCENARIO:?}
 source=fuego-ironworks/sd-card-append-fat
-destination=isomorphisms/sd-card-append-fat
+
+if [ "$scenario" = destination-owner-case ]; then
+    destination_owner=Isomorphisms
+else
+    destination_owner=isomorphisms
+fi
+
+destination=$destination_owner/sd-card-append-fat
 
 if [ "$1" = auth ]; then
     exit 0
@@ -30,15 +37,6 @@ fi
 
 [ "$1" = api ] || exit 97
 shift
-
-if [ "$1" = user ]; then
-    if [ "$scenario" = wrong-login ]; then
-        printf '%s\n' someone-else
-    else
-        printf '%s\n' isomorphisms
-    fi
-    exit 0
-fi
 
 method=GET
 endpoint=
@@ -64,8 +62,36 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
+if [ "$endpoint" = user ]; then
+    if [ "$scenario" = wrong-login ]; then
+        printf '%s\n' someone-else
+    else
+        printf '%s\n' isomorphisms
+    fi
+    exit 0
+fi
+
+case $endpoint in
+    orgs/isomorphisms)
+        [ "$scenario" != destination-org-missing ] || exit 1
+        printf '%s\n' "$destination_owner"
+        exit 0
+        ;;
+    user/memberships/orgs/isomorphisms|user/memberships/orgs/Isomorphisms)
+        [ "$scenario" != destination-membership-missing ] || exit 1
+        printf '%s\n' active:admin
+        exit 0
+        ;;
+esac
+
 if [ "$method" = POST ]; then
     [ "$endpoint" = "repos/$source/transfer" ] || exit 96
+
+    if [ "$scenario" = transfer-rejected ]; then
+        printf '%s\n' 'gh: Validation Failed (HTTP 422)' >&2
+        exit 1
+    fi
+
     printf '%s\n' transferred > "$state"
     exit 0
 fi
@@ -99,6 +125,7 @@ chmod +x "$fakebin/gh"
 run_case() {
     scenario=$1
     expected=$2
+    pattern=${3:-}
     state=$tmp/state-$scenario
     output=$tmp/output-$scenario
     : > "$state"
@@ -124,7 +151,6 @@ run_case() {
                 printf 'FAIL %s: transfer POST was not observed\n' "$scenario" >&2
                 exit 1
             }
-            grep 'verified: isomorphisms/sd-card-append-fat' "$output" >/dev/null
             ;;
         refusal)
             [ "$status" -ne 0 ] || {
@@ -143,11 +169,23 @@ run_case() {
             ;;
     esac
 
+    if [ -n "$pattern" ]; then
+        grep -F "$pattern" "$output" >/dev/null || {
+            cat "$output" >&2
+            printf 'FAIL %s: expected output containing: %s\n' "$scenario" "$pattern" >&2
+            exit 1
+        }
+    fi
+
     printf 'PASS %s\n' "$scenario"
 }
 
-run_case normal success
-run_case destination-redirect success
-run_case destination-exists refusal
-run_case source-redirect refusal
-run_case wrong-login refusal
+run_case normal success 'verified: isomorphisms/sd-card-append-fat'
+run_case destination-owner-case success 'verified: Isomorphisms/sd-card-append-fat'
+run_case destination-redirect success 'verified: isomorphisms/sd-card-append-fat'
+run_case destination-exists refusal 'destination already exists'
+run_case source-redirect refusal 'instead of being the canonical source'
+run_case wrong-login refusal 'gh is authenticated as someone-else'
+run_case destination-org-missing refusal 'destination organization isomorphisms is not accessible'
+run_case destination-membership-missing refusal 'is not an active member of isomorphisms'
+run_case transfer-rejected refusal 'GitHub rejected transfer'
