@@ -1,0 +1,28 @@
+ok 1 - fresh remote source; actual emitted command works outside Git with spaces and quotes
+ok 2 - second emission and execution safely reuse the same checkout
+ok 3 - dirty bytes, untracked bytes and HEAD survive
+ok 4 - arbitrary noncheckout is classified before any source claim
+ok 5 - missing path is not cloned and says other locations unknown
+ok 6 - wrong repository rejected even with locally valid source
+ok 7 - inherited Git config cannot forge the origin
+ok 8 - nonexistent prerequisite rejected before emission; no global absence claim
+ok 9 - unpublished local commit cannot masquerade as a producer handoff
+ok 10 - valid SHA borrowed from another repository cannot satisfy intended publisher
+ok 11 - test on another branch cannot satisfy the selected source
+ok 12 - wrong required blob rejected
+ok 13 - old passing baseline cannot substitute for missing repair
+ok 14 - arbitrary shell snippet with parent exit is not a supported handoff
+ok 15 - moving branch is not an immutable source contract
+ok 16 - inherited Git directory and worktree do not redirect verification
+ok 17 - Git replacement object cannot change the pinned test
+ok 18 - linked worktree works without switching source branches
+ok 19 - partial checkout is preserved and classified
+ok 20 - stale local source blocks; separate explicit refresh enables identical command
+ok 21 - syntax failure blocks command emission
+ok 22 - zero exit without receipt fails
+ok 23 - success-string-only false green rejected with real exit preserved
+ok 24 - runtime failure is separate from syntax and availability
+ok 25 - exact failure command twice cannot exit an errexit parent session
+ok 26 - contract changes after emission are rejected
+ok 27 - engine changes after emission are rejected
+source handoff regression cases: 27 passed

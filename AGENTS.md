@@ -64,6 +64,21 @@ it afterward. The evidence should grow from the intended behavior.
 If a required assumption cannot be established, serve a read-only probe instead
 of a guessed mutation.
 
+## Producer-to-human source handoffs
+
+For the existing pre-Grease POSIX source-test boundary, use
+`tasks/source-handoff/1.sh` and a reviewed, digest-bound task contract before
+emitting a command. Read its requirements and README. A source pin in job prose
+is not materialization evidence. Producer refresh and consumer execution are
+separate phases. Do not substitute a baseline scope for a blocked feature scope.
+The emitted child invocation is conditional so even a parent using errexit
+survives failure. Test the exact emitted text twice from outside the repository.
+
+Other interpreters or mutation classes require a reviewed adapter and rejecting
+mutants before service; the source-test adapter must refuse them. This rule
+does not authorize a POSIX implementation of post-bootstrap Grease procedures.
+Use Cat Food inventory; never create a second checkout registry here.
+
 ## Version and failure record
 
 The numbered script versions are part of Kitchen's evidence. Once a numbered

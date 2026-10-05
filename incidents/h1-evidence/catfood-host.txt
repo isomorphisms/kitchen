@@ -1,0 +1,15 @@
+ok 1 - phone without a source checkout is not provisioned or cloned
+ok 2 - repeated registration is idempotent
+ok 3 - registered path with spaces resolves outside Git
+ok 4 - lookup preserves existing files
+ok 5 - wrong origin is neither reported nor registered
+ok 6 - stale registry entry is not recreated
+ok 7 - multiple checkouts remain explicit, not silently selected
+ok 8 - actual Cat Food help exposes the bounded Kitchen handoff
+ok 9 - reported baseline cannot masquerade as repair or new phone acceptance
+ok 10 - inherited Git directory cannot authenticate a wrong-origin checkout
+ok 11 - environment config cannot rewrite repository identity
+ok 12 - partial checkout cannot borrow another Git directory and survives refusal
+ok 13 - linked worktree is verified and registered without changing its parent
+ok 14 - GitHub repository-name case does not invalidate the same repository
+catfood IB handoff cases: 14 passed

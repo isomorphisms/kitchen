@@ -1,0 +1,22 @@
+repository=https://github.com/isomorphisms/IB.git
+source=f1f22778fb66f7219c13ba864c13b03be10cfea8
+contract_blob=d9b9b9740918b141680e32564d0b560c2cdcbb1a
+engine_blob=578e9d0fc7cfde015c9e66027e54cc014a3aa558
+checkout=/workspace/scratch/2d304f27df4b/IB
+observed_host=Linux 6.18.44 x86_64
+observed_uid=0
+context=posix-sh-existing-checkout
+caller_checkout_required=no
+mutation=temporary-only-reviewed-test
+rerun=reuse-verified-checkout
+scope=ordinary-file-baseline
+excluded=E2-no-replace-concurrent-publication;new-physical-device-evidence;follower-acceptance
+success_marker=durable ordinary-file store tests: ok
+success_exit=0
+file=lib/durable_object_store.grease blob=bdabc03428d7e7d9b7f098b3dc61321798d9dc74
+file=tests/test_durable_object_store.grease blob=b7147483cea50e095193e7e59609091efe2a3aa4
+test.stdout: durable ordinary-file store tests: ok
+acceptance=PASS
+acceptance_scope=ordinary-file-baseline
+excluded_claims=NOT_RUN
+handoff-command=PASS
