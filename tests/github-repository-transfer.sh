@@ -2,12 +2,44 @@
 set -eu
 
 root=$(cd "$(dirname "$0")/.." && pwd)
-candidate=$root/tasks/github-repository-transfer/1.sh
+generator=$root/tasks/github-repository-transfer/generate-transfer-github-repository-script.sh
 
 tmp=${TMPDIR:-/tmp}/kitchen-gh-transfer-$$
 fakebin=$tmp/bin
 mkdir -p "$fakebin"
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+
+candidate=$tmp/transfer-sd-card-append-fat-from-fuego-ironworks-to-isomorphisms.sh
+
+(
+    cd "$tmp"
+    sh "$generator" \
+        fuego-ironworks sd-card-append-fat isomorphisms isomorphisms
+)
+
+[ -x "$candidate" ] || {
+    printf 'FAIL generator: expected executable %s\n' "$candidate" >&2
+    exit 1
+}
+
+grep -F 'source_owner=fuego-ironworks' "$candidate" >/dev/null
+grep -F 'repository=sd-card-append-fat' "$candidate" >/dev/null
+grep -F 'destination_owner=isomorphisms' "$candidate" >/dev/null
+grep -F 'expected_login=isomorphisms' "$candidate" >/dev/null
+
+if grep -F 'usage: 1.sh' "$candidate" >/dev/null; then
+    printf 'FAIL generator: generated script exposes numbered candidate name\n' >&2
+    exit 1
+fi
+
+if (
+    cd "$tmp"
+    sh "$generator" 'bad;owner' sd-card-append-fat isomorphisms isomorphisms \
+        >"$tmp/invalid-generator.out" 2>&1
+); then
+    printf 'FAIL generator: unsafe owner was accepted\n' >&2
+    exit 1
+fi
 
 cat > "$fakebin/sleep" <<'EOF'
 #!/bin/sh
@@ -134,9 +166,7 @@ run_case() {
     PATH="$fakebin:$PATH" \
     FAKE_GH_STATE="$state" \
     FAKE_GH_SCENARIO="$scenario" \
-        sh "$candidate" \
-        fuego-ironworks sd-card-append-fat isomorphisms isomorphisms \
-        >"$output" 2>&1
+        sh "$candidate" >"$output" 2>&1
     status=$?
     set -e
 

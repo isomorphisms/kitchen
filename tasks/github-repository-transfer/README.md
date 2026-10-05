@@ -47,25 +47,46 @@ create a repository in that organization.
 Cat Food does not currently promise that `gh` is installed on every target, so
 this script checks for it rather than assuming deployment state.
 
-## Candidate
+## Human-facing script generation
 
-`1.sh` takes:
+The numbered candidate `1.sh` is internal Kitchen evidence. Do not hand it to
+the human as the normal interface.
 
-```
-SOURCE_OWNER REPOSITORY DESTINATION_OWNER EXPECTED_LOGIN
-```
-
-For the current Append FAT move:
+Use the maintained producer:
 
 ```sh
-sh tasks/github-repository-transfer/1.sh \
-  fuego-ironworks sd-card-append-fat isomorphisms isomorphisms
+sh tasks/github-repository-transfer/generate-transfer-github-repository-script.sh \
+  SOURCE_OWNER REPOSITORY DESTINATION_OWNER EXPECTED_LOGIN
 ```
 
-Run `sh tests/github-repository-transfer.sh` to exercise the normal case,
-canonical-owner casing, old-name destination redirect, real destination
-collision, redirected source, wrong-login refusal, inaccessible destination
-organization, missing organization membership, and a rejected transfer POST.
+It writes a standalone, descriptive script in the current directory:
+
+```
+transfer-REPOSITORY-from-SOURCE_OWNER-to-DESTINATION_OWNER.sh
+```
+
+For the current Append FAT move, the generated file is:
+
+```
+transfer-sd-card-append-fat-from-fuego-ironworks-to-isomorphisms.sh
+```
+
+The transfer parameters are bound into that script, so the human does not need
+to remember or retype them. The generated file has no runtime dependency on the
+Kitchen checkout or on `1.sh`.
+
+Automation preparing a command for the human should run the producer itself and
+serve the generated descriptive script. It should not tell the human to execute
+a numbered candidate.
+
+A fifth producer argument may specify a different output pathname. Existing
+output files are never overwritten.
+
+Run `sh tests/github-repository-transfer.sh` to exercise generation plus the
+normal transfer case, canonical-owner casing, old-name destination redirect,
+real destination collision, redirected source, wrong-login refusal,
+inaccessible destination organization, missing organization membership, unsafe
+generator input, and a rejected transfer POST.
 
 ## Recognition rule
 
@@ -85,7 +106,9 @@ gh api --method POST "repos/$source_owner/$repository/transfer" \
   -f "new_owner=$destination_owner"
 ```
 
-Prefer the checked wrapper in `1.sh`, which verifies authentication,
-source/destination identity, destination organization membership, redirect
-behavior, API rejection, and the destination postcondition before claiming
-success.
+The checked transfer logic remains versioned internally as `1.sh`. For a
+human-facing handoff, generate a descriptive standalone script with
+`generate-transfer-github-repository-script.sh`; do not expose the numbered
+candidate as the normal command. The generated script preserves the candidate's
+authentication, source/destination identity, destination organization
+membership, redirect handling, API rejection, and postcondition checks.
