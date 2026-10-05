@@ -4,7 +4,7 @@ set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 generator=$root/tasks/github-repository-transfer/generate-transfer-github-repository-script.sh
 
-tmp=${TMPDIR:-/tmp}/kitchen-gh-transfer-$
+tmp=${TMPDIR:-/tmp}/kitchen-gh-transfer-$$
 fakebin=$tmp/bin
 mkdir -p "$fakebin"
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
