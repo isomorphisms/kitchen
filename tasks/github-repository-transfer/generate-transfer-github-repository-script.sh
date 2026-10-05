@@ -40,7 +40,7 @@ case $output in
         ;;
 esac
 
-here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+here=$(CDPATH= cd "$(dirname "$0")" && pwd)
 candidate=$here/1.sh
 
 [ -r "$candidate" ] || fail "cannot read versioned candidate: $candidate"
