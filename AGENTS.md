@@ -81,10 +81,20 @@ Use Cat Food inventory; never create a second checkout registry here.
 
 ## Version and failure record
 
-The numbered script versions are part of Kitchen's evidence. Once a numbered
-version has been tested, served, or otherwise become evidence, do not silently
-rewrite its history. Make the next numbered version for a materially changed
-attempt.
+The numbered script versions are part of Kitchen's evidence. They are not
+automatically the human-facing interface. When a task provides a producer or
+generator for a descriptive standalone script, run that producer during
+preparation and hand the human the descriptive artifact rather than telling
+them to execute a numbered candidate.
+
+For GitHub ownership transfers, use
+`tasks/github-repository-transfer/generate-transfer-github-repository-script.sh`
+to produce a transfer-specific script. Do not serve
+`tasks/github-repository-transfer/1.sh` as the normal human command.
+
+Once a numbered version has been tested, served, or otherwise become evidence,
+do not silently rewrite its history. Make the next numbered version for a
+materially changed attempt.
 
 When a numbered version exposes a bug, bad assumption, misleading success, or
 other useful failure, add a companion Markdown note beginning with the same
