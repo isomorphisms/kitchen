@@ -40,9 +40,12 @@ artifact ∈ str ← output + "/transfer-sample-from-source-to-destination.sh"
 Path(artifact).write_bytes(artifacts[0])
 digest ∈ str ← hashlib.sha256(artifacts[0]).hexdigest()
 decisions ∈ list[dict[str, object]] ← []
-for mode in ["personal", "organization", "accepted-unverified", "visibility", "post-failure", "wrong-id", "collision", "authentication", "capability", "network"]:
+for mode in ["personal", "organization", "accepted-unverified", "accepted-still-pending", "visibility", "post-failure", "wrong-id", "collision", "authentication", "capability", "network"]:
     base ∈ str ← output + "/" + mode
     Path(base).mkdir()
+    executed_artifact ∈ str ← base + "/transfer-sample-from-source-to-destination.sh"
+    Path(executed_artifact).write_bytes(artifacts[0])
+    os.chmod(executed_artifact, 292)
     os.mkfifo(base + "/request")
     os.mkfifo(base + "/response")
     specification ∈ str ← base + "/fixture.json"
@@ -53,7 +56,7 @@ for mode in ["personal", "organization", "accepted-unverified", "visibility", "p
         server ∈ object ← subprocess.Popen(server_command, env=control_environment, stderr=error, start_new_session=True)
         codes ∈ list[int] ← []
         try:
-            executions ∈ int ← 2 if mode == "personal" or mode == "organization" or mode == "accepted-unverified" else 1
+            executions ∈ int ← 2 if mode == "personal" or mode == "organization" or mode == "accepted-unverified" or mode == "accepted-still-pending" else 1
             for index in range(executions):
                 work ← base + "/unrelated cwd '" + str(index)
                 home ∈ str ← base + '/fresh home "' + str(index)
@@ -62,7 +65,10 @@ for mode in ["personal", "organization", "accepted-unverified", "visibility", "p
                 child_environment ∈ dict[str, str] ← dict(environment)
                 child_environment["HOME"] ← home
                 child_environment["FP_FIXTURE_IO"] ← base
-                child ← subprocess.run([launcher, workspace + "/kitchen/tests/transfer-parent.grease", launcher, artifact], cwd=work, env=child_environment, capture_output=True, timeout=10)
+                child_environment["GH_TOKEN"] ← "disposable-fixture-token"
+                child_environment["GITHUB_TOKEN"] ← "disposable-fixture-token"
+                child_environment["GH_HOST"] ← "invalid.fixture"
+                child ← subprocess.run([launcher, workspace + "/kitchen/tests/transfer-parent.grease", launcher, executed_artifact], cwd=work, env=child_environment, capture_output=True, timeout=10)
                 Path(base + "/stdout-" + str(index) + ".bin").write_bytes(child.stdout)
                 Path(base + "/stderr-" + str(index) + ".bin").write_bytes(child.stderr)
                 parent_output ∈ bytes ← child.stdout

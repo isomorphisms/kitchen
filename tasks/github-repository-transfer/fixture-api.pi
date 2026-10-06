@@ -23,6 +23,8 @@ while True:
     if len(payload) > 8192:
         raise ValueError("oversize API request")
     request ∈ dict[str, object] ← json.loads(payload)
+    if request["credential_override"] != False:
+        raise ValueError("INHERITED_CREDENTIAL_OVERRIDE")
     args ∈ list[str] ← list(request["argv"])
     if len(args) == 0 or args[0] == "api" and len(args) < 2:
         raise ValueError("MALFORMED_FIXTURE_INVOCATION")
@@ -54,7 +56,7 @@ while True:
             elif mode == "post-failure":
                 code ← 5
                 body ← "API_REJECTED"
-            elif mode != "accepted-unverified":
+            elif mode != "accepted-unverified" and mode != "accepted-still-pending":
                 owner ← destination
                 if mode == "visibility":
                     visibility ← "public"

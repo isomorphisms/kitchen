@@ -6,8 +6,13 @@ from builtins import open
 environment ∈ dict[str, str] ← os.environ
 argv ∈ list[str] ← sys.argv
 root ∈ str ← environment["FP_FIXTURE_IO"]
+override ∈ bool ← False
+for name in ["GH_TOKEN", "GITHUB_TOKEN", "GH_HOST"]:
+    value ∈ object ← environment.get(name)
+    if value != None:
+        override ← True
 with open(root + "/request", "w") as request:
-    request.write(json.dumps({"argv": argv[1:]}))
+    request.write(json.dumps({"argv": argv[1:], "credential_override": override}))
 with open(root + "/response", "r") as stream:
     payload ∈ str ← stream.read(8193)
 response ∈ dict[str, object] ← json.loads(payload)
