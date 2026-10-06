@@ -1,114 +1,45 @@
-# GitHub repository transfer
+# GitHub repository transfer script generation
 
-Target context: Termux or another shell where the GitHub CLI `gh` is already
-installed and authenticated.
+Owners: Kitchen #15/#24, AICI #205 and Cat Food #107. The FP registered operation
+generates a script and tests its exact bytes against disposable API fixtures. It
+does not transfer a live repository. The qualified runtime target is
+`linux-x86_64-grease-v1`; availability on Termux or another machine requires its
+own runtime qualification.
 
-This task exists because repository transfer has several recurring traps:
+The maintained descriptive generator is
+`generate-transfer-github-repository-script.sh`. Its six data arguments are
+source owner, repository, destination owner, expected authenticated login,
+positive numeric repository ID and the qualified context above. It derives
+`transfer-REPOSITORY-from-SOURCE-to-DESTINATION.sh` in the chosen scratch directory
+and refuses to overwrite an existing file. There is no output-path override.
 
-1. a successful lookup is not proof that an owner/name is canonical; GitHub
-   preserves redirects after repository moves;
-2. environment variables such as `GH_TOKEN` or `GITHUB_TOKEN` can silently
-   select credentials different from the interactive `gh` login;
-3. a destination organization can exist while the authenticated account is not
-   an active member or cannot see that membership through its current `gh`
-   authentication;
-4. GitHub owner/repository names are case-insensitive, so exact shell string
-   comparisons can reject a valid canonical owner merely because of casing;
-5. a transfer POST can be rejected before any destination appears, and that
-   API error must be shown rather than disappearing behind `set -e`.
+The generated Grease artifact contains all task parameters and candidate 5's
+body. It has no dependency on a Kitchen checkout, numbered helper, hidden cwd,
+parent variable or live token supplied by the generator. It requires a qualified
+Grease interpreter and an authenticated `gh` installation when a human later
+chooses to use it. That separate live action is outside FP2's operation.
 
-## Requirements
+The body checks the expected login, canonical numeric repository identity,
+canonical source name, administrator capability and unchanged visibility. It
+distinguishes personal destinations from organizations; membership is checked
+only for an organization. A destination collision is rejected. Every attempted
+transfer POST is followed by a numeric-identity observation even when the POST
+fails. An accepted request with no verified move fails explicitly. A rerun first
+reconciles numeric identity and does not resend a transfer already observed at
+the destination.
 
-The checked helper is for transfers into GitHub organizations. It must:
+`tests/qualify-transfer-artifact.pi` runs actual generation twice, compares the
+bytes, then executes that artifact in unrelated fresh homes and directories with
+spaces and quotes. `tests/transfer-parent.grease` proves the parent shell survives
+successful and failing children. Disposable API observations are checked by
+AICI's maintained `validators/kitchen-transfer-script.pi`. The local diagnostic
+is explicitly narrower than FP's hosted worker-isolation acceptance.
 
-- establish the exact authenticated GitHub login before mutation;
-- verify that the source lookup resolves to the requested owner/repository,
-  comparing names case-insensitively while retaining GitHub's canonical casing;
-- resolve and print the canonical destination organization login;
-- verify that the authenticated user has an active membership in that
-  destination organization before mutation;
-- test a possible destination by comparing returned `.full_name`, not by HTTP
-  success alone;
-- treat a lookup that redirects somewhere else as a redirect, not as a
-  destination collision;
-- refuse when the canonical destination already exists;
-- use GitHub's repository transfer endpoint:
-  `POST repos/SOURCE_OWNER/REPOSITORY/transfer` with `new_owner`;
-- surface GitHub's transfer error if the POST fails;
-- make one transfer request;
-- poll until the destination lookup returns the canonical destination;
-- fail rather than claim success if that postcondition never appears, reporting
-  what the old source path resolves to after the polling window.
+Candidates 1–4 and their failure notes are retained. Candidate 1 and the
+`generate-transfer-github-repository-script-legacy-1.sh` producer are historical
+POSIX debt, not a qualification for transfer orchestration. The temporary-source-
+test POSIX exception remains confined to `tasks/source-handoff/1.sh`.
 
-GitHub requires administrator access to the source repository. For a transfer
-into an organization, the authenticated user must also have permission to
-create a repository in that organization.
-
-Cat Food does not currently promise that `gh` is installed on every target, so
-this script checks for it rather than assuming deployment state.
-
-## Human-facing script generation
-
-The numbered candidate `1.sh` is internal Kitchen evidence. Do not hand it to
-the human as the normal interface.
-
-Use the maintained producer:
-
-```sh
-sh tasks/github-repository-transfer/generate-transfer-github-repository-script.sh \
-  SOURCE_OWNER REPOSITORY DESTINATION_OWNER EXPECTED_LOGIN
-```
-
-It writes a standalone, descriptive script in the current directory:
-
-```
-transfer-REPOSITORY-from-SOURCE_OWNER-to-DESTINATION_OWNER.sh
-```
-
-For the current Append FAT move, the generated file is:
-
-```
-transfer-sd-card-append-fat-from-fuego-ironworks-to-isomorphisms.sh
-```
-
-The transfer parameters are bound into that script, so the human does not need
-to remember or retype them. The generated file has no runtime dependency on the
-Kitchen checkout or on `1.sh`.
-
-Automation preparing a command for the human should run the producer itself and
-serve the generated descriptive script. It should not tell the human to execute
-a numbered candidate.
-
-A fifth producer argument may specify a different output pathname. Existing
-output files are never overwritten.
-
-Run `sh tests/github-repository-transfer.sh` to exercise generation plus the
-normal transfer case, canonical-owner casing, old-name destination redirect,
-real destination collision, redirected source, wrong-login refusal,
-inaccessible destination organization, missing organization membership, unsafe
-generator input, and a rejected transfer POST.
-
-## Recognition rule
-
-When the user asks for the **"GH API move script"**, **"GitHub API move script"**,
-or asks to move a repository between GitHub owners/organizations, use this task.
-Do not invent a file-tree copier or recreate repository contents through the
-Contents or Git Data APIs.
-
-The intended operation is a **repository ownership transfer**, which preserves
-the repository as a repository: history, issues, pull requests, releases, stars,
-and redirects remain under GitHub's transfer semantics.
-
-The canonical API operation is:
-
-```sh
-gh api --method POST "repos/$source_owner/$repository/transfer" \
-  -f "new_owner=$destination_owner"
-```
-
-The checked transfer logic remains versioned internally as `1.sh`. For a
-human-facing handoff, generate a descriptive standalone script with
-`generate-transfer-github-repository-script.sh`; do not expose the numbered
-candidate as the normal command. The generated script preserves the candidate's
-authentication, source/destination identity, destination organization
-membership, redirect handling, API rejection, and postcondition checks.
+The recognition rule for “GH API move script” still selects this descriptive
+producer. Never replace repository ownership transfer with a file-tree copier or
+Contents API recreation; never serve a numbered candidate as the normal handoff.

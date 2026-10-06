@@ -1,0 +1,8 @@
+# Fixture-only parent; the delivered artifact has no dependency on this file.
+if @ARGV {
+  write -- PARENT_SURVIVED
+  exit 0
+} else {
+  write -- PARENT_SURVIVED
+  exit 1
+}

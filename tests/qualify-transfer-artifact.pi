@@ -62,9 +62,12 @@ for mode in ["personal", "organization", "accepted-unverified", "visibility", "p
                 child_environment ∈ dict[str, str] ← dict(environment)
                 child_environment["HOME"] ← home
                 child_environment["FP_FIXTURE_IO"] ← base
-                child ← subprocess.run([launcher, artifact], cwd=work, env=child_environment, capture_output=True, timeout=10)
+                child ← subprocess.run([launcher, workspace + "/kitchen/tests/transfer-parent.grease", launcher, artifact], cwd=work, env=child_environment, capture_output=True, timeout=10)
                 Path(base + "/stdout-" + str(index) + ".bin").write_bytes(child.stdout)
                 Path(base + "/stderr-" + str(index) + ".bin").write_bytes(child.stderr)
+                parent_output ∈ bytes ← child.stdout
+                if not parent_output.endswith(b"PARENT_SURVIVED\n"):
+                    raise ValueError("parent shell did not survive")
                 code ← child.returncode
                 codes.append(code)
             if len(codes) == 1:
