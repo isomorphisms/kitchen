@@ -20,7 +20,8 @@ code ∈ int ← int(response["code"])
 body ∈ object ← response["body"]
 included ∈ bool ← "--include" in argv
 if included:
-    print("HTTP/1.1 " + str(response["http_status"]) + " Fixture\r\nContent-Type: application/json\r\n\r\n" + json.dumps(body))
+    encoded ∈ str ← json.dumps(body)
+    print("HTTP/1.1 " + str(response["http_status"]) + " Fixture\r\nContent-Type: application/json\r\n\r\n" + encoded)
 elif code == 0:
     print(json.dumps(body))
 else:

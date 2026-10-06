@@ -13,7 +13,7 @@ positive numeric repository ID and the qualified context above. It derives
 `transfer-REPOSITORY-from-SOURCE-to-DESTINATION.sh` in the chosen scratch directory
 and refuses to overwrite an existing file. There is no output-path override.
 
-The generated Grease artifact contains all task parameters and candidate 5's
+The generated Grease artifact contains all task parameters and candidate 7's
 body. It has no dependency on a Kitchen checkout, numbered helper, hidden cwd,
 parent variable or live token supplied by the generator. It requires a qualified
 Grease interpreter and an authenticated `gh` installation when a human later
@@ -27,6 +27,13 @@ transfer POST is followed by a numeric-identity observation even when the POST
 fails. An accepted request with no verified move fails explicitly. A rerun first
 reconciles numeric identity and does not resend a transfer already observed at
 the destination.
+
+A durable intent ledger is written beside the artifact before POST. If a rerun
+still observes the source, it blocks without resending; an observed move must
+retain the original visibility. Destination absence requires CLI exit 1 and an
+included HTTP 404 response. Authentication exit 4 and HTTP 403 block. The checked
+interface test exercises the installed GitHub CLI against disposable HTTP
+responses with no live credentials.
 
 `tests/qualify-transfer-artifact.pi` runs actual generation twice, compares the
 bytes, then executes that artifact in unrelated fresh homes and directories with
