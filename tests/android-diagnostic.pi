@@ -39,7 +39,7 @@ def main() → None:
     for trial in ["first directory", "second 'directory'"]:
         folder ∈ Path ← root.joinpath(trial)
         folder.mkdir(mode=448)
-        for scenario in ["valid", "adb-valid", "adb-server", "adb-connection", "frame-valid", "frame-header-only", "zoom-valid", "zoom-missing", "zoom-stale", "service", "unauthorized", "termux", "wrong-package", "no-pid", "multiple-pid", "changed-pid", "swapped-apk", "permission", "failed-producer", "timeout", "interrupted", "empty-log"]:
+        for scenario in ["valid", "adb-valid", "adb-server", "adb-connection", "frame-valid", "frame-header-only", "zoom-valid", "zoom-missing", "zoom-stale", "service", "unauthorized", "termux", "wrong-package", "no-pid", "multiple-pid", "changed-pid", "disappeared-pid", "reused-pid", "swapped-apk", "permission", "failed-producer", "timeout", "output-limit", "interrupted", "empty-log"]:
             case ∈ Path ← folder.joinpath(scenario)
             case.mkdir(mode=448)
             launcher ∈ Path ← case.joinpath("rish")
@@ -125,6 +125,10 @@ def main() → None:
                 expected ← "PID_ABSENT_OR_MULTIPLE"
             elif scenario == "changed-pid":
                 expected ← "PROCESS_CHANGED_OR_DISAPPEARED"
+            elif scenario == "disappeared-pid":
+                expected ← "PROCESS_CHANGED_OR_DISAPPEARED"
+            elif scenario == "reused-pid":
+                expected ← "PROCESS_CHANGED:pid reused"
             elif scenario == "swapped-apk":
                 expected ← "INSTALLED_ARTIFACT_MISMATCH"
             elif scenario == "permission":
@@ -133,6 +137,8 @@ def main() → None:
                 expected ← "PRODUCER_FAILURE:observation:7"
             elif scenario == "timeout":
                 expected ← "CAPTURE_TIMEOUT"
+            elif scenario == "output-limit":
+                expected ← "CAPTURE_OUTPUT_LIMIT"
             elif scenario == "interrupted":
                 expected ← "CAPTURE_INTERRUPTED_OR_SIGNAL"
             elif scenario == "empty-log":

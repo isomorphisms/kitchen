@@ -52,19 +52,30 @@ int main(int argc, char **argv) {
         strcpy(slash+1, "pid-count.txt");
         f = fopen(path, "r"); int count = 0;
         if (f) { if (fscanf(f, "%d", &count) != 1) return 92; fclose(f); }
+        if (!strcmp(mode, "disappeared-pid") && count) return 1;
         f = fopen(path, "w"); if (!f) return 92;
         fprintf(f, "%d\n", count+1); fclose(f);
         puts(!strcmp(mode, "changed-pid") && count ? "43" : "42"); return 0;
     }
     if (!strncmp(command, "/system/bin/cat /proc/", 21)) {
+        strcpy(slash+1, "start-count.txt");
+        f = fopen(path, "r"); int count = 0;
+        if (f) { if (fscanf(f, "%d", &count) != 1) return 92; fclose(f); }
+        f = fopen(path, "w"); if (!f) return 92;
+        fprintf(f, "%d\n", count+1); fclose(f);
         printf("42 (fixture ) with space) S");
         for (int i=0; i<18; i++) printf(" 0");
-        puts(" 9876 0"); return 0;
+        puts(!strcmp(mode, "reused-pid") && count ? " 9877 0" : " 9876 0"); return 0;
     }
     if (strstr(command, "logcat") || strstr(command, "screencap")) {
         if (!strcmp(mode, "permission")) { fputs("Permission denied\n", stderr); return 13; }
         if (!strcmp(mode, "failed-producer")) { puts("plausible output followed by successful formatting"); return 7; }
         if (!strcmp(mode, "timeout")) { sleep(8); return 0; }
+        if (!strcmp(mode, "output-limit")) {
+            char block[16384]; memset(block, 'X', sizeof(block));
+            for (int i=0; i<128; i++) fwrite(block, 1, sizeof(block), stdout);
+            return 0;
+        }
         if (!strcmp(mode, "interrupted")) { return 130; }
         if (!strcmp(mode, "empty-log")) return 0;
         if (!strcmp(mode, "zoom-missing")) { puts("unrelated log, no application state"); return 0; }
