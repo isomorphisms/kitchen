@@ -2,7 +2,7 @@
 set -eu
 
 root=$(cd "$(dirname "$0")/.." && pwd)
-generator=$root/tasks/github-repository-transfer/generate-transfer-github-repository-script.sh
+generator=$root/tasks/github-repository-transfer/generate-transfer-github-repository-script-legacy-1.sh
 
 tmp=${TMPDIR:-/tmp}/kitchen-gh-transfer-$$
 fakebin=$tmp/bin
