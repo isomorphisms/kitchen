@@ -35,3 +35,9 @@ owns verified checkout lookup and the dated phone observation.
 New source-test handoffs use the shared [producer gate](tasks/source-handoff/README.md).
 It verifies fresh source materialization before emitting a digest-bound command;
 consumer execution remains read-only and acceptance stays scope-specific.
+
+## Book lookup
+
+[Book lookup](tasks/book-lookup/README.md) owns the user's direct AbeBooks and
+Internet Archive lookup forms. Flexible Pipes may invoke these scripts, but
+provider URL construction stays here.
