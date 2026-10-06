@@ -1,0 +1,90 @@
+"""Local artifact diagnostic; it does not qualify FP worker isolation or deploy."""
+import sys
+import os
+import json
+import subprocess
+import signal
+import hashlib
+from pathlib import Path
+from builtins import dict, list, open, ValueError, ProcessLookupError
+
+argv ∈ list[str] ← sys.argv
+workspace ∈ str ← argv[1]
+output ∈ str ← argv[2]
+launcher ∈ str ← argv[3]
+grease_source ∈ str ← argv[4]
+Path(output).mkdir(mode=493, parents=True, exist_ok=False)
+ithon ∈ list[str] ← ["/usr/bin/python3", workspace + "/ithon/ithon_host.py"]
+task ∈ str ← workspace + "/kitchen/tasks/github-repository-transfer"
+environment ∈ dict[str, str] ← {"PATH": output + "/bin:/usr/bin:/bin", "PYTHONPATH": grease_source + ":" + grease_source + "/vendor", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"}
+control_environment ∈ dict[str, str] ← {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"}
+Path(output + "/bin").mkdir()
+bridge ∈ str ← "#!" + launcher + "\nexec /usr/bin/env -u PYTHONHOME -u PYTHONPATH /usr/bin/python3 " + workspace + "/ithon/ithon_host.py " + task + '/fixture-gh.pi "$@"\n'
+Path(output + "/bin/gh").write_text(bridge)
+os.chmod(output + "/bin/gh", 365)
+inputs ∈ dict[str, object] ← {"source_owner": "source", "repository": "sample", "destination_owner": "destination", "expected_login": "login", "expected_repository_id": 123, "target_context": "linux-x86_64-grease-v1"}
+artifacts ∈ list[bytes] ← []
+for index in range(2):
+    work ∈ str ← output + "/generation space '" + str(index)
+    Path(work).mkdir()
+    child ∈ object ← subprocess.run([launcher, task + "/generate-transfer-github-repository-script.sh", "source", "sample", "destination", "login", "123", "linux-x86_64-grease-v1"], cwd=work, env=environment, capture_output=True, timeout=10)
+    Path(work + "/stdout.bin").write_bytes(child.stdout)
+    Path(work + "/stderr.bin").write_bytes(child.stderr)
+    code ∈ int ← child.returncode
+    if code != 0:
+        raise ValueError("generation failed")
+    artifacts.append(Path(work + "/transfer-sample-from-source-to-destination.sh").read_bytes())
+if artifacts[0] != artifacts[1]:
+    raise ValueError("generation was not deterministic")
+artifact ∈ str ← output + "/transfer-sample-from-source-to-destination.sh"
+Path(artifact).write_bytes(artifacts[0])
+digest ∈ str ← hashlib.sha256(artifacts[0]).hexdigest()
+decisions ∈ list[dict[str, object]] ← []
+for mode in ["personal", "organization", "accepted-unverified", "visibility", "post-failure", "wrong-id", "collision", "authentication", "capability", "network"]:
+    base ∈ str ← output + "/" + mode
+    Path(base).mkdir()
+    os.mkfifo(base + "/request")
+    os.mkfifo(base + "/response")
+    specification ∈ str ← base + "/fixture.json"
+    Path(specification).write_text(json.dumps({"inputs": inputs, "mode": mode, "artifact_sha256": digest}))
+    server_command ∈ list[str] ← list(ithon)
+    server_command.extend([task + "/fixture-api.pi", base, specification])
+    with open(base + "/server.stderr.bin", "xb") as error:
+        server ∈ object ← subprocess.Popen(server_command, env=control_environment, stderr=error, start_new_session=True)
+        codes ∈ list[int] ← []
+        try:
+            executions ∈ int ← 2 if mode == "personal" or mode == "organization" or mode == "accepted-unverified" else 1
+            for index in range(executions):
+                work ← base + "/unrelated cwd '" + str(index)
+                home ∈ str ← base + '/fresh home "' + str(index)
+                Path(work).mkdir()
+                Path(home).mkdir()
+                child_environment ∈ dict[str, str] ← dict(environment)
+                child_environment["HOME"] ← home
+                child_environment["FP_FIXTURE_IO"] ← base
+                child ← subprocess.run([launcher, artifact], cwd=work, env=child_environment, capture_output=True, timeout=10)
+                Path(base + "/stdout-" + str(index) + ".bin").write_bytes(child.stdout)
+                Path(base + "/stderr-" + str(index) + ".bin").write_bytes(child.stderr)
+                code ← child.returncode
+                codes.append(code)
+            if len(codes) == 1:
+                codes.append(-125)
+            execution ∈ str ← base + "/execution.json"
+            Path(execution).write_text(json.dumps({"first_exit": codes[0], "second_exit": codes[1]}))
+            validator ∈ list[str] ← list(ithon)
+            validator.extend([workspace + "/ai-ci/validators/kitchen-transfer-script.pi", specification, base + "/observations.json", execution, artifact, base + "/decision.json"])
+            child ← subprocess.run(validator, env=control_environment, capture_output=True, timeout=10)
+            Path(base + "/validator.stderr.bin").write_bytes(child.stderr)
+            code ← child.returncode
+            if code != 0:
+                raise ValueError("independent fixture failed: " + mode)
+            decision ∈ dict[str, object] ← json.loads(Path(base + "/decision.json").read_bytes())
+            decisions.append(decision)
+        finally:
+            try:
+                os.killpg(server.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            server.wait()
+Path(output + "/result.json").write_text(json.dumps({"status": "PASS", "scope": "local-artifact-diagnostic", "excluded_claims": ["worker-isolation", "trusted-execution", "deployment", "live-transfer"], "artifact_sha256": digest, "fixtures": decisions}, sort_keys=True))
+print("local artifact diagnostic passed")
