@@ -13,7 +13,7 @@ positive numeric repository ID and the qualified context above. It derives
 `transfer-REPOSITORY-from-SOURCE-to-DESTINATION.sh` in the chosen scratch directory
 and refuses to overwrite an existing file. There is no output-path override.
 
-The generated Grease artifact contains all task parameters and candidate 8's
+The generated Grease artifact contains all task parameters and candidate 9's
 body. It has no dependency on a Kitchen checkout, numbered helper, hidden cwd,
 parent variable or live token supplied by the generator. It requires a qualified
 Grease interpreter and an authenticated `gh` installation when a human later
@@ -42,7 +42,7 @@ successful and failing children. Disposable API observations are checked by
 AICI's maintained `validators/kitchen-transfer-script.pi`. The local diagnostic
 is explicitly narrower than FP's hosted worker-isolation acceptance.
 
-Candidates 1–7 and their failure notes are retained. Candidate 1 and the
+Candidates 1–8 and their failure notes are retained. Candidate 1 and the
 `generate-transfer-github-repository-script-legacy-1.sh` producer are historical
 POSIX debt, not a qualification for transfer orchestration. The temporary-source-
 test POSIX exception remains confined to `tasks/source-handoff/1.sh`.
