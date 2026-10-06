@@ -4,13 +4,20 @@ Kitchen owns the pasteable/user-facing invocation of the user's local AZ Amazon
 backend. Do not replace this path with a generic Amazon URL or an unrelated web
 search when AZ is available.
 
-AZ is installed locally at:
+The canonical AZ source repository is:
+
+```text
+Ashtray-Archer/az
+```
+
+Do not fall back to the former `isomorphisms/az` location. The maintained
+phone installation is the built backend at:
 
 ```sh
 $PREFIX/bin/az
 ```
 
-and is invoked through Grease:
+and it is invoked through Grease:
 
 ```sh
 grease "$PREFIX/bin/az" doctor
