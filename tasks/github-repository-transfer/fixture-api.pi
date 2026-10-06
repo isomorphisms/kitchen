@@ -1,0 +1,92 @@
+"""Disposable API service. Run by the validator, outside the worker UID."""
+import json
+import sys
+from pathlib import Path
+from builtins import open, dict, list, ValueError
+
+argv ∈ list[str] ← sys.argv
+root ∈ str ← argv[1]
+config ∈ dict[str, object] ← json.loads(Path(argv[2]).read_bytes())
+inputs ∈ dict[str, object] ← dict(config["inputs"])
+mode ∈ str ← str(config["mode"])
+source ∈ str ← str(inputs["source_owner"]) + "/" + str(inputs["repository"])
+destination ∈ str ← str(inputs["destination_owner"]) + "/" + str(inputs["repository"])
+identity ∈ int ← int(inputs["expected_repository_id"])
+owner ∈ str ← source
+visibility ∈ str ← "private"
+mutations ∈ int ← 0
+identity_reads ∈ int ← 0
+events ∈ list[dict[str, object]] ← []
+while True:
+    with open(root + "/request", "r") as stream:
+        payload ∈ str ← stream.read(8193)
+    if len(payload) > 8192:
+        raise ValueError("oversize API request")
+    request ∈ dict[str, object] ← json.loads(payload)
+    args ∈ list[str] ← list(request["argv"])
+    code ∈ int ← 0
+    body ∈ object ← None
+    method ∈ str ← "GET"
+    endpoint ∈ str ← "auth"
+    if args[0] == "auth":
+        if mode == "authentication":
+            code ← 3
+            body ← "AUTHENTICATION"
+    elif args[0] == "api":
+        position ∈ int ← 1
+        if args[1] == "--method":
+            method ← args[2]
+            position ← 3
+        endpoint ← args[position]
+        if mode == "network":
+            code ← 6
+            body ← "NETWORK_UNAVAILABLE"
+        elif method == "POST":
+            mutations ← mutations + 1
+            if endpoint != "repos/" + source + "/transfer" or args[position + 2] != "new_owner=" + str(inputs["destination_owner"]):
+                code ← 7
+                body ← "WRONG_MUTATION"
+            elif mutations > 1:
+                code ← 7
+                body ← "DUPLICATE_MUTATION"
+            elif mode == "post-failure":
+                code ← 5
+                body ← "API_REJECTED"
+            elif mode != "accepted-unverified":
+                owner ← destination
+                if mode == "visibility":
+                    visibility ← "public"
+        elif endpoint == "user":
+            body ← {"login": inputs["expected_login"]}
+        elif endpoint == "users/" + str(inputs["destination_owner"]):
+            kind ∈ str ← "Organization" if mode == "organization" else "User"
+            body ← {"login": inputs["destination_owner"], "type": kind}
+        elif endpoint == "user/memberships/orgs/" + str(inputs["destination_owner"]):
+            body ← {"state": "active", "role": "admin"}
+        elif endpoint == "repositories/" + str(identity) or endpoint == "repos/" + source or endpoint == "repos/" + destination:
+            if endpoint == "repositories/" + str(identity):
+                identity_reads ← identity_reads + 1
+                if mode == "accepted-unverified" and identity_reads >= 3:
+                    owner ← destination
+            if endpoint == "repos/" + destination and owner != destination:
+                if mode == "collision":
+                    body ← {"id": identity + 1, "full_name": destination, "visibility": "private", "permissions": {"admin": True}}
+                else:
+                    code ← 4
+                    body ← "NOT_FOUND"
+            else:
+                observed_id ∈ int ← identity + 1 if mode == "wrong-id" else identity
+                capable ∈ bool ← mode != "capability"
+                body ← {"id": observed_id, "full_name": owner, "visibility": visibility, "permissions": {"admin": capable}}
+        else:
+            code ← 4
+            body ← "NOT_FOUND"
+    else:
+        raise ValueError("unsupported fixture invocation")
+    event ∈ dict[str, object] ← {"index": len(events), "method": method, "endpoint": endpoint, "argv": args, "code": code, "body": body, "owner": owner, "repository_id": identity, "visibility": visibility}
+    events.append(event)
+    Path(root + "/observations.json").write_text(json.dumps({"mode": mode, "events": events, "mutations": mutations, "owner": owner, "repository_id": identity, "visibility": visibility}))
+    if len(events) > 100:
+        raise ValueError("API attempt bound exceeded")
+    with open(root + "/response", "w") as reply:
+        reply.write(json.dumps({"code": code, "body": body}))

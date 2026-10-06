@@ -1,0 +1,20 @@
+"""CLI bridge to disposable FIFO API; cannot write validator observations."""
+import json
+import sys
+import os
+from builtins import open
+environment ∈ dict[str, str] ← os.environ
+argv ∈ list[str] ← sys.argv
+root ∈ str ← environment["FP_FIXTURE_IO"]
+with open(root + "/request", "w") as request:
+    request.write(json.dumps({"argv": argv[1:]}))
+with open(root + "/response", "r") as stream:
+    payload ∈ str ← stream.read(8193)
+response ∈ dict[str, object] ← json.loads(payload)
+code ∈ int ← int(response["code"])
+body ∈ object ← response["body"]
+if code == 0:
+    print(json.dumps(body))
+else:
+    print(str(body), file=sys.stderr)
+sys.exit(code)
