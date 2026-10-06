@@ -1,0 +1,38 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+test "$#" = 4 || { echo 'expected AICI_ROOT OUTPUT_DIRECTORY ABI HOST_PYTHON' >&2; exit 2; }
+var aici = "$1"
+var output = "$2"
+var abi = "$3"
+var host_python = "$4"
+var script = $(/usr/bin/readlink -f "$0")
+var task = $(/usr/bin/dirname "$script")
+var kitchen = $(/usr/bin/dirname "$(/usr/bin/dirname "$task")")
+var ndk = ENV.ANDROID_NDK_ROOT
+var cc = "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang-18"
+var ld = "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/ld.lld"
+var cc_sha = $(/usr/bin/sha256sum "$cc" | /usr/bin/awk '{print $1}')
+var ld_sha = $(/usr/bin/sha256sum "$ld" | /usr/bin/awk '{print $1}')
+test "$cc_sha" = a871130d810536f7bb924c8aeaff57c66de27bed9b13d0ccafba25fdcc8bd02d
+test "$ld_sha" = c4a7473d3b8a99a32335616838af2aa85c6333091abeab423be2a905ff5f288c
+test ! -e "$output" || { echo 'fresh runtime build output required' >&2; exit 2; }
+var flags = []
+case "$abi" in
+  armeabi-v7a)
+    setvar flags = ['--target=armv7a-linux-androideabi21', '-fPIE', '-pie']
+    ;;
+  HOST_FIXTURE)
+    test -x "$host_python" || exit 2
+    setvar flags = ['--target=x86_64-linux-gnu', '--sysroot=/', '-rtlib=libgcc', '-unwindlib=libgcc', "-DKITCHEN_PYTHON=\"$host_python\""]
+    ;;
+  *) echo 'UNQUALIFIED_RUNTIME_ABI' >&2; exit 2 ;;
+esac
+/usr/bin/mkdir -m 700 "$output"
+"$cc" @flags "--ld-path=$ld" -std=c17 -Wall -Wextra -Werror -O2 "$aici/src/bounded_process.c" -o "$output/bounded-process"
+"$cc" @flags "--ld-path=$ld" -std=c17 -Wall -Wextra -Werror -O2 "$task/launcher.c" -o "$output/kitchen-android-capture"
+if test "$abi" = HOST_FIXTURE; then
+  "$cc" @flags "--ld-path=$ld" -std=c17 -Wall -Wextra -Werror -O2 "$kitchen/tests/android-channel-fixture.c" -o "$output/android-channel-fixture"
+fi
+/usr/bin/sha256sum "$cc" "$ld" "$aici/src/bounded_process.c" "$task/launcher.c" "$task/capture.pi" "$output/bounded-process" "$output/kitchen-android-capture" > "$output/materials.sha256"
+var revision = $(/usr/bin/git --no-replace-objects -C "$kitchen" rev-parse HEAD)
+printf 'schema\tkitchen-diagnostic-runtime-candidate-v1\nsource_commit\t%s\nabi\t%s\ncompile\tndk\nlink\tndk\nruntime_execution\tNOT_RUN\nphysical\tNOT_RUN\n' "$revision" "$abi" > "$output/candidate.tsv"

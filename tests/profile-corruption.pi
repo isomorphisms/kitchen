@@ -1,0 +1,24 @@
+from pathlib import Path
+import sys
+
+source_name ∈ str ← sys._getframe().f_code.co_filename
+root ∈ Path ← Path(source_name).resolve().parents.__getitem__(1)
+current ∈ str ← root.joinpath("systems/miro-a1-termux.md").read_text()
+historical ∈ str ← root.joinpath("fixtures/miro-a1-termux-corrupt.md").read_text()
+old_count ∈ int ← historical.count("# MIRO A1 — Termux")
+new_count ∈ int ← current.count("# MIRO A1 — Termux")
+old_corrupt ∈ bool ← historical.__contains__("A1:/ # MIRO A1 — Termux")
+new_corrupt ∈ bool ← current.__contains__("A1:/ # MIRO A1 — Termux")
+if old_count != 3:
+    sys.exit("historical corruption fixture changed")
+if old_corrupt == False:
+    sys.exit("fixture does not contain the actual corruption")
+if new_count != 1:
+    sys.exit("profile opening repeated in current source")
+if new_corrupt:
+    sys.exit("profile opening embedded in prompt")
+old_assignment ∈ str ← historical.split("```sh\n").__getitem__(1).split("\n```").__getitem__(0)
+new_assignment ∈ str ← current.split("```sh\n").__getitem__(1).split("\n```").__getitem__(0)
+if old_assignment != new_assignment:
+    sys.exit("literal PS1 assignment changed")
+print("PASS actual historical corruption rejected; literal assignment retained")

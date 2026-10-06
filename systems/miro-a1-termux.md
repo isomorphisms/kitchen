@@ -1,104 +1,40 @@
 # MIRO A1 — Termux
 
-Source: Cat Food device notes, especially `isomorphisms/catfood/AGENTS.md`.
-Treat observations as mutable and recheck when they materially affect a command.
+Source: Cat Food's `android/devices/miro-a1.md`, its dated observation files,
+and `AGENTS.md`. Durable facts and current capabilities have different scopes.
 
-## Known conventions and observations
+Preferred executable location: private Termux `~/opt/bin`. Shizuku exports
+were observed at `~/storage/shared/Shizuku`, with
+`~/opt/Shizuku -> ../storage/shared/Shizuku/`. A DEX loaded by `app_process`
+may need private storage and non-writable permissions. Neither valid files
+nor a cyan prompt establish authorization or a running Shizuku service.
 
-- Preferred executable location in the phone's private Termux storage:
-  `~/opt/bin`.
-- Do not invent `~/bin` merely because it is conventional elsewhere.
-- Android shared Downloads is `~/storage/downloads`; that name does not mean
-  external SD.
-- A removable card has previously appeared as `~/storage/external-1`, but its
-  presence, mount and execution properties must be reverified before use.
-- Shizuku exported terminal files were observed at
-  `~/storage/shared/Shizuku`, with the convenience link
-  `~/opt/Shizuku -> ../storage/shared/Shizuku/`.
-- Shared Android storage is not automatically executable. In particular, a DEX
-  that must be loaded by `app_process` may need to be copied into private
-  Termux storage and made non-writable.
+Shared Downloads means `~/storage/downloads`. Cat Food records the A1 card
+root as `/storage/4A21-0000`; `~/storage/external-1` is the app-private
+directory on that card, not its whole root. Refresh mounts before storage work.
 
-## Known-good interactive Shizuku/rish prompt
+## Interactive Shizuku/rish prompt
 
-In the September 30 / October 1 MIRO A1 session, the following command was
-served **inside the interactive `rish` shell** and the user subsequently
-showed the cyan `A1:/ # MIRO A1 — Termux
-
-Source: Cat Food device notes, especially `isomorphisms/catfood/AGENTS.md`.
-Treat observations as mutable and recheck when they materially affect a command.
-
-## Known conventions and observations
-
-- Preferred executable location in the phone's private Termux storage:
-  `~/opt/bin`.
-- Do not invent `~/bin` merely because it is conventional elsewhere.
-- Android shared Downloads is `~/storage/downloads`; that name does not mean
-  external SD.
-- A removable card has previously appeared as `~/storage/external-1`, but its
-  presence, mount and execution properties must be reverified before use.
-- Shizuku exported terminal files were observed at
-  `~/storage/shared/Shizuku`, with the convenience link
-  `~/opt/Shizuku -> ../storage/shared/Shizuku/`.
-- Shared Android storage is not automatically executable. In particular, a DEX
-  that must be loaded by `app_process` may need to be copied into private
-  Termux storage and made non-writable.
-
- prompt:
+The literal assignment retained from the September 30 / October 1 record is:
 
 ```sh
 PS1="$(printf '\033[1;36m')A1$(printf '\033[0m'):"'${PWD}'" \\$ "
 ```
 
-Preserve this literal command when the request is simply to recover the
-known-working Shizuku prompt. The single-quoted `${PWD}` is intentional: it
-keeps the parameter reference in `PS1` so the displayed path changes after
-`cd`, rather than freezing the directory that was current when the assignment
-ran.
+The previous file repeated the profile opening twice inside its claimed
+rendered prompt. That text is corruption, not a supported exact prompt
+observation. Preserve the assignment; do not reconstruct the rendered result.
+The single-quoted `${PWD}` keeps its expansion interactive. Cyan is a visual
+marker, not evidence of shell UID or root. Do not prepend this assignment to
+noninteractive `rish -c` tasks.
 
-Evidence boundary:
+## Execution contexts
 
-- cyan was preferred over the earlier magenta experiment;
-- the observed interactive result was `A1:/ # MIRO A1 — Termux
+Termux process, rish launcher/DEX, Shizuku authorization/service, ADB host
+server, connected Android ADB device, shell UID 2000 and root UID 0 remain
+separate states. `adb devices` does not prove it started Shizuku.
 
-Source: Cat Food device notes, especially `isomorphisms/catfood/AGENTS.md`.
-Treat observations as mutable and recheck when they materially affect a command.
-
-## Known conventions and observations
-
-- Preferred executable location in the phone's private Termux storage:
-  `~/opt/bin`.
-- Do not invent `~/bin` merely because it is conventional elsewhere.
-- Android shared Downloads is `~/storage/downloads`; that name does not mean
-  external SD.
-- A removable card has previously appeared as `~/storage/external-1`, but its
-  presence, mount and execution properties must be reverified before use.
-- Shizuku exported terminal files were observed at
-  `~/storage/shared/Shizuku`, with the convenience link
-  `~/opt/Shizuku -> ../storage/shared/Shizuku/`.
-- Shared Android storage is not automatically executable. In particular, a DEX
-  that must be loaded by `app_process` may need to be copied into private
-  Termux storage and made non-writable.
-
-;
-- this is an interactive-shell prompt assignment, not a command to prepend to
-  `rish -c`;
-- prompt color is only a visual context marker and is not evidence of UID,
-  Shizuku authorization, or root.
-
-## Context boundaries
-
-Do not confuse:
-
-- ordinary Termux UID and permissions;
-- `adb shell`;
-- Shizuku/rish;
-- root.
-
-A command proven in one context is not proven in the others.
-
-## Useful read-only refresh probes
-
-Prefer direct evidence such as `readlink -f`, `test -e`, `command -v`,
-`id`, mount/space inspection, and an execution probe where execution capability
-is the actual question.
+Use `tasks/android-diagnostic/capture.pi` after AICI preparation and Cat Food
+profile selection. Its authority and operation probes refresh only relevant
+mutable facts. Missing instance, firmware, installed bytes or telemetry stay
+visible; historical GPU/compositor evidence does not accept Crystal.
