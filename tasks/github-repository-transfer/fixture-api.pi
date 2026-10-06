@@ -24,6 +24,8 @@ while True:
         raise ValueError("oversize API request")
     request ∈ dict[str, object] ← json.loads(payload)
     args ∈ list[str] ← list(request["argv"])
+    if len(args) == 0 or args[0] == "api" and len(args) < 2:
+        raise ValueError("MALFORMED_FIXTURE_INVOCATION")
     code ∈ int ← 0
     body ∈ object ← None
     method ∈ str ← "GET"
