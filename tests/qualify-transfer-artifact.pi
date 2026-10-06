@@ -40,7 +40,7 @@ artifact ∈ str ← output + "/transfer-sample-from-source-to-destination.sh"
 Path(artifact).write_bytes(artifacts[0])
 digest ∈ str ← hashlib.sha256(artifacts[0]).hexdigest()
 decisions ∈ list[dict[str, object]] ← []
-for mode in ["personal", "organization", "accepted-unverified", "accepted-still-pending", "visibility", "post-failure", "wrong-id", "collision", "authentication", "capability", "network"]:
+for mode in ["personal", "organization", "accepted-unverified", "accepted-still-pending", "visibility", "post-failure", "wrong-id", "collision", "authentication", "capability", "network", "destination-authentication", "destination-api"]:
     base ∈ str ← output + "/" + mode
     Path(base).mkdir()
     executed_artifact ∈ str ← base + "/transfer-sample-from-source-to-destination.sh"

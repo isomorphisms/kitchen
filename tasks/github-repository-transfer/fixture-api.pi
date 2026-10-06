@@ -29,21 +29,24 @@ while True:
     if len(args) == 0 or args[0] == "api" and len(args) < 2:
         raise ValueError("MALFORMED_FIXTURE_INVOCATION")
     code ∈ int ← 0
+    http_status ∈ int ← 200
     body ∈ object ← None
     method ∈ str ← "GET"
     endpoint ∈ str ← "auth"
     if args[0] == "auth":
         if mode == "authentication":
-            code ← 3
+            code ← 1
             body ← "AUTHENTICATION"
     elif args[0] == "api":
         position ∈ int ← 1
+        if args[1] == "--include":
+            position ← 2
         if args[1] == "--method":
             method ← args[2]
             position ← 3
         endpoint ← args[position]
         if mode == "network":
-            code ← 6
+            code ← 1
             body ← "NETWORK_UNAVAILABLE"
         elif method == "POST":
             mutations ← mutations + 1
@@ -54,7 +57,8 @@ while True:
                 code ← 7
                 body ← "DUPLICATE_MUTATION"
             elif mode == "post-failure":
-                code ← 5
+                code ← 1
+                http_status ← 403
                 body ← "API_REJECTED"
             elif mode != "accepted-unverified" and mode != "accepted-still-pending":
                 owner ← destination
@@ -73,24 +77,34 @@ while True:
                 if mode == "accepted-unverified" and identity_reads >= 3:
                     owner ← destination
             if endpoint == "repos/" + destination and owner != destination:
-                if mode == "collision":
+                if mode == "destination-authentication":
+                    code ← 4
+                    http_status ← 401
+                    body ← {"message": "Requires authentication"}
+                elif mode == "destination-api":
+                    code ← 1
+                    http_status ← 403
+                    body ← {"message": "Forbidden"}
+                elif mode == "collision":
                     body ← {"id": identity + 1, "full_name": destination, "visibility": "private", "permissions": {"admin": True}}
                 else:
-                    code ← 4
-                    body ← "NOT_FOUND"
+                    code ← 1
+                    http_status ← 404
+                    body ← {"message": "Not Found"}
             else:
                 observed_id ∈ int ← identity + 1 if mode == "wrong-id" else identity
                 capable ∈ bool ← mode != "capability"
                 body ← {"id": observed_id, "full_name": owner, "visibility": visibility, "permissions": {"admin": capable}}
         else:
-            code ← 4
-            body ← "NOT_FOUND"
+            code ← 1
+            http_status ← 404
+            body ← {"message": "Not Found"}
     else:
         raise ValueError("unsupported fixture invocation")
-    event ∈ dict[str, object] ← {"index": len(events), "method": method, "endpoint": endpoint, "argv": args, "code": code, "body": body, "owner": owner, "repository_id": identity, "visibility": visibility}
+    event ∈ dict[str, object] ← {"index": len(events), "method": method, "endpoint": endpoint, "argv": args, "code": code, "http_status": http_status, "body": body, "owner": owner, "repository_id": identity, "visibility": visibility}
     events.append(event)
     Path(root + "/observations.json").write_text(json.dumps({"mode": mode, "events": events, "mutations": mutations, "owner": owner, "repository_id": identity, "visibility": visibility}))
     if len(events) > 100:
         raise ValueError("API attempt bound exceeded")
     with open(root + "/response", "w") as reply:
-        reply.write(json.dumps({"code": code, "body": body}))
+        reply.write(json.dumps({"code": code, "http_status": http_status, "body": body}))

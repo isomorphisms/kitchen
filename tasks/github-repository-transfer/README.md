@@ -35,7 +35,7 @@ successful and failing children. Disposable API observations are checked by
 AICI's maintained `validators/kitchen-transfer-script.pi`. The local diagnostic
 is explicitly narrower than FP's hosted worker-isolation acceptance.
 
-Candidates 1–4 and their failure notes are retained. Candidate 1 and the
+Candidates 1–6 and their failure notes are retained. Candidate 1 and the
 `generate-transfer-github-repository-script-legacy-1.sh` producer are historical
 POSIX debt, not a qualification for transfer orchestration. The temporary-source-
 test POSIX exception remains confined to `tasks/source-handoff/1.sh`.
