@@ -1,0 +1,16 @@
+#!/usr/bin/env grease
+# Preparation procedure; dependencies come from the exact target's delivery.
+set -eu
+fail() { printf '\033[31mFAIL\033[0m %s\n' "$*" >&2; exit 2; }
+test "$#" = 4 || fail 'usage: 1.grease VERIFIED_GREASE IB_CHECKOUT SOURCE_BYTES SOURCE_TSV'
+runner=$1
+checkout=$2
+source=$3
+manifest=$4
+case $runner in /*) ;; *) fail 'Grease path must be absolute' ;; esac
+case $checkout in /*) ;; *) fail 'IB path must be absolute' ;; esac
+test -x "$runner" && test -f "$checkout/bin/retain-source.grease" || fail 'declared runtime/intake is unavailable'
+printf '\033[36mRetain selected source\033[0m\n' >&2
+printf 'ib_revision\t%s\n' "$(git -C "$checkout" rev-parse HEAD)" >&2
+"$runner" "$checkout/bin/ib" retain-source "$source" "$manifest"
+printf '\033[32mPASS\033[0m exact retained-source intake; decoding and live acceptance remain separate\n' >&2
