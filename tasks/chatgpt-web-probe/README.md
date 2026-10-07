@@ -53,3 +53,22 @@ It downloads only the named `chatgpt-web-probe-paired` artifact from
 `isomorphisms/flexible-pipes`, requires the expected bundle files, and then
 hands the bundle to `install.sh`. The selected APK still comes from Cat Food's
 observed device identity, not from the caller.
+
+
+## collect-baseline.sh
+
+After the probe is installed, visibly logged into ChatGPT, and left open:
+
+```sh
+bash collect-baseline.sh BUNDLE_DIRECTORY
+```
+
+The script forwards the probe WebView DevTools socket and records a first
+evidence set: redacted session shape, account discovery, active/archived lists,
+projects, shared list, memories/settings/custom instructions, then—when an
+active conversation id can be found—singular, plural, batch, and one plural
+previous-page read.
+
+HTTP errors are retained as observations rather than translated into fake
+success. The live session token is never intentionally written to the fixture
+corpus; the session fixture redacts `accessToken`.
