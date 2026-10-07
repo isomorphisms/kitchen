@@ -1,0 +1,21 @@
+name: GitHub repository fork helper
+on:
+  push:
+    paths:
+      - 'tasks/github-repository-fork/**'
+      - 'tests/github-repository-fork.sh'
+      - '.github/workflows/github-repository-fork.yml'
+  pull_request:
+    paths:
+      - 'tasks/github-repository-fork/**'
+      - 'tests/github-repository-fork.sh'
+      - '.github/workflows/github-repository-fork.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - run: sh tests/github-repository-fork.sh
