@@ -76,6 +76,12 @@ packager_commit=$(git -C "$ANDROID_NDK_CHECKOUT" rev-parse HEAD)
 catfood_commit=$(git -C "$CATFOOD_CHECKOUT" rev-parse HEAD)
 aici_commit=$(git -C "$AICI_CHECKOUT" rev-parse HEAD)
 
+toolchain_verifier="$out/aici-contract"
+cc -std=c17 -Wall -Wextra -Werror -O2 "$AICI_CHECKOUT/src/aici.c" -o "$toolchain_verifier"
+"$toolchain_verifier" verify \
+    "$AICI_CHECKOUT/contracts/build-toolchain-v0.contract.tsv" \
+    "$CHATGPT_PROBE_CHECKOUT"
+
 verifier="$out/aici-android-signing"
 cc -std=c17 -Wall -Wextra -Werror -pedantic -O2 "$signing_source" -o "$verifier"
 
