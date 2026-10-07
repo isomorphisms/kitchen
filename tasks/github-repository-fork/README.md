@@ -1,53 +1,50 @@
 # GitHub repository fork
 
-Target context: Termux or another shell with GitHub CLI `gh` installed and
-authenticated.
+Kitchen owns the checked semantics and human-facing form for repository-fork scripts.
 
-This task creates a GitHub fork under a destination organization while preserving the
-repository name. It exists to avoid ambiguous browser/manual state and to verify that
-the destination is actually in the expected fork network.
+## Human-facing form
 
-## Requirements
+The canonical human output is a **plain-text paste block of direct `gh` commands**.
+It is described by `paste-contract.json` and rendered by
+`render-paste-block.py`.
 
-The checked helper must:
+Parameters:
 
-- establish the exact authenticated GitHub login before mutation;
-- verify the source lookup resolves to the requested canonical owner/repository;
-- resolve the destination organization and verify active membership;
-- treat an existing destination as success only when it is already a fork whose
-  source network is the requested source;
-- refuse an unrelated repository collision at the destination name;
-- issue exactly one `POST repos/SOURCE/REPOSITORY/forks` with the destination
-  organization and unchanged repository name;
-- request a full fork rather than a default-branch-only fork;
-- surface GitHub's API error if the fork request is rejected;
-- poll until the destination exists and verifies both its canonical name and source
-  fork network;
-- fail rather than claim success when the verified destination never appears.
+- `source_owner`
+- `repository`
+- `destination_org`
 
-## Human-facing generation
+The repository name is preserved. The renderer deliberately omits `--fork-name` and
+uses `--clone=false`. It emits no `sh` invocation and no attached script file.
 
-The numbered candidate `1.sh` is Kitchen evidence, not the normal interface.
-Generate a standalone, parameter-bound script:
-
-```sh
-sh tasks/github-repository-fork/generate-fork-github-repository-script.sh \
-  SOURCE_OWNER REPOSITORY DESTINATION_ORGANIZATION EXPECTED_LOGIN
-```
-
-For MicroPython:
-
-```sh
-sh tasks/github-repository-fork/generate-fork-github-repository-script.sh \
-  micropython micropython dilapidated-shed isomorphisms
-```
-
-This produces:
+MicroPython is one ordinary invocation:
 
 ```text
-fork-micropython-from-micropython-into-dilapidated-shed.sh
+source_owner=micropython
+repository=micropython
+destination_org=dilapidated-shed
 ```
 
-Run `sh tests/github-repository-fork.sh` for generator, normal fork,
-already-correct idempotence, unrelated collision, redirected source, wrong login,
-organization/membership failures, API rejection, and wrong-network regressions.
+The exact rendered bytes for that case are stored as a test vector in
+`paste-contract.json`.
+
+## Internal historical helper
+
+`1.sh` and its generator are retained as implementation evidence from the first
+attempt. They are **not** the user-facing interface. The companion failure note records
+why: they crossed the wrong shell boundary.
+
+That older helper also captured stronger refusal behavior around canonical identity,
+organization membership, collisions, API rejection, and fork-network verification.
+Those requirements remain useful for a future richer Grease/YSH implementation, but the
+plain-text paste contract does not claim all of those controls.
+
+## Tests
+
+`python3 tests/github-repository-fork-paste.py` verifies every contract vector, unsafe
+name refusal, no shell-interpreter invocation, name preservation, no clone, and exact
+bytes.
+
+Flexible Pipes is expected to render the same contract form. Its parity test must check
+out the exact Kitchen commit and compare every Kitchen vector byte-for-byte rather than
+copying expected strings by hand.
