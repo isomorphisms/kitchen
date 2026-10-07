@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "operation": "github-repository-fork",
+  "parameters": [
+    "source_owner",
+    "repository",
+    "destination_org"
+  ],
+  "output_contract": {
+    "form": "plain-text-paste-block",
+    "shell_interpreter_invocation": false,
+    "preserve_repository_name": true,
+    "clone": false,
+    "verification": "final gh api fork-network read"
+  },
+  "cases": [
+    {
+      "parameters": {
+        "source_owner": "micropython",
+        "repository": "micropython",
+        "destination_org": "dilapidated-shed"
+      },
+      "expected": "gh auth status --hostname github.com\ngh repo fork micropython/micropython --org dilapidated-shed --clone=false\ngh api repos/dilapidated-shed/micropython --jq '{full_name, fork, parent: .parent.full_name, source: .source.full_name}'\n"
+    },
+    {
+      "parameters": {
+        "source_owner": "example-owner",
+        "repository": "tiny-runtime",
+        "destination_org": "example-org"
+      },
+      "expected": "gh auth status --hostname github.com\ngh repo fork example-owner/tiny-runtime --org example-org --clone=false\ngh api repos/example-org/tiny-runtime --jq '{full_name, fork, parent: .parent.full_name, source: .source.full_name}'\n"
+    }
+  ]
+}
