@@ -16,7 +16,9 @@ for command in gh mktemp rm bash; do
     command -v "$command" >/dev/null 2>&1 || fail "missing command: $command"
 done
 
-work=$(mktemp -d "${TMPDIR:-$HOME/.cache}/chatgpt-web-probe.XXXXXX") ||
+scratch_root=${TMPDIR:-"$HOME/.cache"}
+mkdir -p "$scratch_root" || fail "cannot create scratch root: $scratch_root"
+work=$(mktemp -d "$scratch_root/chatgpt-web-probe.XXXXXX") ||
     fail "cannot create temporary directory"
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 bundle="$work/bundle"
