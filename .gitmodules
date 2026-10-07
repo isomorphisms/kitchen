@@ -1,0 +1,9 @@
+[submodule "sources/interpreters/micropython"]
+	path = sources/interpreters/micropython
+	url = https://github.com/dilapidated-shed/micropython.git
+[submodule "sources/interpreters/fieldmouse"]
+	path = sources/interpreters/fieldmouse
+	url = https://github.com/dilapidated-shed/fieldmouse.git
+[submodule "sources/interpreters/mujs"]
+	path = sources/interpreters/mujs
+	url = https://github.com/ArtifexSoftware/mujs.git
