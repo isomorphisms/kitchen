@@ -93,7 +93,8 @@ while IFS=$'\t' read -r device abi ndk_target api priority profile physical_acce
         *) fail "unsupported Cat Food probe device: $device" ;;
     esac
 
-    mkdir -p "$out/lib/$suffix"\n    library="$out/lib/$suffix/lib${native_library}.so"
+    mkdir -p "$out/lib/$suffix"
+    library="$out/lib/$suffix/lib${native_library}.so"
     "$compiler"         -std=c17 -Wall -Wextra -Werror -pedantic -O2         -fPIC -shared         -Wl,-soname,"lib${native_library}.so"         -Wl,--no-undefined -Wl,-z,relro,-z,now         "$source_file" -llog -landroid         -o "$library"
 
     llvm_readelf="$clang_root/llvm-readelf"
