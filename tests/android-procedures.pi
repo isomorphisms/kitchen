@@ -1,0 +1,187 @@
+"""Candidate owner protocol through identical Grease bytes, never Android proof."""
+from argparse import ArgumentParser
+from pathlib import Path
+from builtins import dict
+import hashlib
+import shutil
+import subprocess
+import sys
+
+def sha(path ∈ Path) → str:
+    answer ∈ str ← hashlib.sha256(path.read_bytes()).hexdigest()
+    return answer
+
+def write(path ∈ Path, data ∈ dict[str, str]) → None:
+    rendered ← ""
+    for key in data:
+        value ∈ str ← data.get(key, "")
+        rendered ← rendered + key + "\t" + value + "\n"
+    path.write_text(rendered)
+
+def main() → None:
+    parser ∈ ArgumentParser ← ArgumentParser()
+    for name in ["ithon", "grease", "ysh", "bounded-process", "fixture", "output"]:
+        parser.add_argument("--" + name, required=True)
+    args ∈ object ← parser.parse_args()
+    output_name ∈ str ← args.output
+    root ∈ Path ← Path(output_name)
+    root.mkdir(mode=448, exist_ok=False)
+    ithon_name ∈ str ← args.ithon
+    grease_name ∈ str ← args.grease
+    ysh_name ∈ str ← args.ysh
+    bound_name ∈ str ← args.bounded_process
+    fixture_name ∈ str ← args.fixture
+    source_name ∈ str ← sys._getframe().f_code.co_filename
+    kitchen ∈ Path ← Path(source_name).resolve().parents.__getitem__(1)
+    corpus ∈ list[str] ← kitchen.joinpath("fixtures/android-procedures/cases.tsv").read_text().splitlines()
+    ledger ← "trial\toperation\troute\tinvariant\tcase\texit\tresult\n"
+    failures ← 0
+    for trial in ["first unrelated directory", "second 'unrelated' directory"]:
+        folder ∈ Path ← root.joinpath(trial)
+        folder.mkdir(mode=448)
+        for operation in ["materialize", "install-update", "capture"]:
+            for route in ["manual", "registered"]:
+                for row in corpus:
+                    if row.startswith("invariant\t"):
+                        continue
+                    fields ∈ list[str] ← row.split("\t")
+                    invariant ∈ str ← fields.__getitem__(0)
+                    scenario ∈ str ← fields.__getitem__(1)
+                    expected ∈ str ← fields.__getitem__(2)
+                    case ∈ Path ← folder.joinpath(operation + "-" + route + "-" + scenario)
+                    case.mkdir(mode=448)
+                    owner ∈ Path ← case.joinpath("owner.pi")
+                    wrapper ∈ Path ← case.joinpath("run.grease")
+                    shutil.copyfile(kitchen.joinpath("tasks/android-procedures/1-run.pi"), owner)
+                    shutil.copyfile(kitchen.joinpath("tasks/android-procedures/1-run.grease"), wrapper)
+                    adapter ∈ Path ← case.joinpath("adapter")
+                    shutil.copyfile(fixture_name, adapter)
+                    adapter.chmod(448)
+                    payload ∈ Path ← case.joinpath("payload")
+                    payload.write_bytes(b"verified fixture payload")
+                    sentinel ∈ Path ← case.joinpath("device-state")
+                    sentinel.write_bytes(b"retained installation, logs, service and permissions")
+                    sentinel_digest ∈ str ← sha(sentinel)
+                    manifest ← ""
+                    roles ∈ dict[str, str] ← dict()
+                    roles.__setitem__("owner", str(owner))
+                    roles.__setitem__("wrapper", str(wrapper))
+                    roles.__setitem__("ithon", ithon_name)
+                    roles.__setitem__("grease", grease_name)
+                    roles.__setitem__("grease-native", ysh_name)
+                    roles.__setitem__("bounded-process", bound_name)
+                    roles.__setitem__("payload", str(payload))
+                    for stage in ["admission", "executor", "validator"]:
+                        roles.__setitem__(stage, str(adapter))
+                    ithon_root ∈ Path ← Path(ithon_name).parent
+                    for runtime_file in ["ithon_host.py", "Lib/ithon_run.py", "Lib/ithon_frontend.py", "Lib/ithon_static.py"]:
+                        normalized ∈ str ← runtime_file.replace("/", "-").replace("_", "-").replace(".", "-").lower()
+                        role ∈ str ← "ithon-" + normalized
+                        roles.__setitem__(role, str(ithon_root.joinpath(runtime_file)))
+                    roles.__setitem__("python", str(Path("/usr/bin/python3").resolve()))
+                    roles.__setitem__("environment-boundary", "/usr/bin/env")
+                    roles.__setitem__("digest-boundary", "/usr/bin/sha256sum")
+                    roles.__setitem__("digest-format-boundary", "/usr/bin/cut")
+                    for role in roles:
+                        name ∈ str ← roles.get(role, "")
+                        manifest ← manifest + role + "\t" + name + "\t" + sha(Path(name)) + "\n"
+                    case.joinpath("manifest.tsv").write_text(manifest)
+                    contract ∈ dict[str, str] ← dict()
+                    contract.__setitem__("schema", "kitchen-android-procedure-fixture-v1")
+                    contract.__setitem__("scope", "HOST_FIXTURE")
+                    contract.__setitem__("operation", operation)
+                    contract.__setitem__("context", "host-fixture")
+                    contract.__setitem__("source_commit", "1111111111111111111111111111111111111111")
+                    contract.__setitem__("manifest_sha256", sha(case.joinpath("manifest.tsv")))
+                    if scenario == "android-unqualified":
+                        contract.__setitem__("scope", "ANDROID")
+                    contract_path ∈ Path ← case.joinpath("contract.tsv")
+                    write(contract_path, contract)
+                    if scenario == "duplicate-contract":
+                        text ∈ str ← contract_path.read_text()
+                        contract_path.write_text(text + "scope\tHOST_FIXTURE\n")
+                    if scenario == "unknown-contract":
+                        text ∈ str ← contract_path.read_text()
+                        contract_path.write_text(text + "uninstall\ttrue\n")
+                    case.joinpath("profile.input").write_text(scenario + "\n")
+                    case.joinpath("plan.input").write_text("fixture-plan\n")
+                    case.joinpath("requirements.input").write_text("no uninstall; preserve data; read-only capture\n")
+                    case.joinpath("runtime.input").write_text("prebuilt; explicit runtime context\n")
+                    case.joinpath("location.input").write_text("path\t" + str(payload) + "\n")
+                    if scenario == "uri-valid":
+                        case.joinpath("location.input").write_text("uri\tcontent://fixture/payload\n")
+                    if scenario == "uri-as-path":
+                        case.joinpath("location.input").write_text("path\tcontent://fixture/payload\n")
+                    command ∈ list[str] ← [grease_name, str(wrapper), ithon_name, str(owner), sha(owner), sha(Path(ithon_name)), "--contract", str(contract_path), "--contract-sha256", sha(contract_path), "--manifest", str(case.joinpath("manifest.tsv")), "--route", route, "--output", str(case.joinpath("result"))]
+                    registration ∈ dict[str, str] ← dict()
+                    registration.__setitem__("schema", "kitchen-fp-registration-fixture-v1")
+                    registration.__setitem__("contract_sha256", sha(contract_path))
+                    registration.__setitem__("plan_sha256", sha(case.joinpath("plan.input")))
+                    registration.__setitem__("profile_sha256", sha(case.joinpath("profile.input")))
+                    registration.__setitem__("invocation_id", "fixture-execution-42")
+                    if scenario == "wrong-registration":
+                        if route == "manual":
+                            expected ← "UNEXPECTED_REGISTRATION"
+                        registration.__setitem__("plan_sha256", "wrong")
+                    write(case.joinpath("registration.tsv"), registration)
+                    if route == "registered" or scenario == "wrong-registration":
+                        command.extend(["--registration", str(case.joinpath("registration.tsv")), "--registration-sha256", sha(case.joinpath("registration.tsv"))])
+                    for key in ["plan", "profile", "requirements", "runtime", "location"]:
+                        input_path ∈ Path ← case.joinpath(key + ".input")
+                        command.extend(["--" + key, str(input_path), "--" + key + "-sha256", sha(input_path)])
+                    if scenario == "changed-script":
+                        text ∈ str ← owner.read_text()
+                        owner.write_text(text + "\n# changed acquired bytes\n")
+                    if scenario == "changed-runtime":
+                        adapter.write_bytes(b"changed executable bytes")
+                    if scenario == "changed-payload":
+                        payload.write_bytes(b"changed payload")
+                    if scenario == "changed-profile":
+                        case.joinpath("profile.input").write_text("changed profile\n")
+                    if scenario == "symlink-input":
+                        link_path ∈ Path ← case.joinpath("profile.input")
+                        original ∈ Path ← case.joinpath("original-profile")
+                        link_path.rename(original)
+                        link_path.symlink_to(original)
+                    environment ∈ dict[str, str] ← dict()
+                    environment.__setitem__("PATH", "/usr/bin:/bin")
+                    environment.__setitem__("ITHON_PYTHON", "/not-the-reviewed-runtime")
+                    environment.__setitem__("PYTHONPATH", "/not-a-reviewed-module-directory")
+                    environment.__setitem__("HOME", "/nonexistent")
+                    environment.__setitem__("CATFOOD_TARGET", "wrong-ambient-handset")
+                    environment.__setitem__("CATFOOD_DEVICE_ABI", "wrong-ambient-abi")
+                    child ∈ subprocess.CompletedProcess ← subprocess.run(command, cwd=str(folder), env=environment, capture_output=True)
+                    code ∈ int ← child.returncode
+                    stdout ∈ bytes ← child.stdout
+                    stderr ∈ bytes ← child.stderr
+                    case.joinpath("stdout").write_bytes(stdout)
+                    case.joinpath("stderr").write_bytes(stderr)
+                    matched ← False
+                    receipt ∈ Path ← case.joinpath("result/receipt.tsv")
+                    if expected == "PASS":
+                        if code == 0 and receipt.is_file():
+                            content ∈ str ← receipt.read_text()
+                            if content.__contains__("state\tPASS\n") and content.__contains__("scope\t" + route + "-owner-execution-fixture\n"):
+                                matched ← True
+                    elif code != 0:
+                        matched ← stderr.__contains__(expected.encode())
+                        if receipt.is_file():
+                            content ∈ str ← receipt.read_text()
+                            if content.__contains__("state\tPASS\n"):
+                                matched ← False
+                    if sha(sentinel) != sentinel_digest:
+                        matched ← False
+                    if ["wrong-handset", "wrong-abi", "stale-profile", "signer-refusal", "downgrade-refusal", "uri-as-path", "mutant-admission-exit-zero"].__contains__(scenario):
+                        if case.joinpath("result/executor.tsv.effects").exists():
+                            matched ← False
+                    result ← "PASS"
+                    if matched == False:
+                        failures ← failures + 1
+                        result ← "FAIL"
+                    ledger ← ledger + trial + "\t" + operation + "\t" + route + "\t" + invariant + "\t" + scenario + "\t" + str(code) + "\t" + result + "\n"
+                    root.joinpath("results.tsv").write_text(ledger)
+    print(ledger)
+    if failures != 0:
+        sys.exit(1)
+
+main()

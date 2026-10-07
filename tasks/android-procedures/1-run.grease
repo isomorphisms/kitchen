@@ -1,0 +1,22 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+test "$#" -ge 4 || { echo 'expected absolute ITHON OWNER OWNER_SHA256 ITHON_SHA256 followed by explicit inputs' >&2; exit 2; }
+var ithon = "$1"
+var owner = "$2"
+var owner_sha = "$3"
+var ithon_sha = "$4"
+shift 4
+case "$ithon:$owner" in
+  /*:/*) ;;
+  *) echo 'absolute runtime and owner required' >&2; exit 2 ;;
+esac
+var actual_owner = $(/usr/bin/sha256sum "$owner" | /usr/bin/cut -d ' ' -f 1)
+var actual_ithon = $(/usr/bin/sha256sum "$ithon" | /usr/bin/cut -d ' ' -f 1)
+test "$owner_sha" = "$actual_owner" && test "$ithon_sha" = "$actual_ithon" || { echo 'FILE_DIGEST_MISMATCH:before owner execution' >&2; exit 1; }
+if /usr/bin/env -i PATH=/usr/bin:/bin "$ithon" "$owner" "$@"; then
+  printf '\033[32mPASS\033[0m maintained Android procedure (read typed receipt)\n'
+else
+  var code = "$?"
+  printf '\033[31mFAIL\033[0m maintained Android procedure: %s\n' "$code" >&2
+  exit "$code"
+fi

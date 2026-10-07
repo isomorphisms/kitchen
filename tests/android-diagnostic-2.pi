@@ -1,0 +1,219 @@
+"""Exact copied task bytes, fresh environment, two unrelated launch directories."""
+from argparse import ArgumentParser
+from pathlib import Path
+from builtins import dict
+from subprocess import CompletedProcess
+import hashlib
+import json
+import shutil
+import subprocess
+import sys
+
+def sha(path ∈ Path) → str:
+    answer ∈ str ← hashlib.sha256(path.read_bytes()).hexdigest()
+    return answer
+
+def main() → None:
+    parser ∈ ArgumentParser ← ArgumentParser()
+    parser.add_argument("--ithon", required=True)
+    parser.add_argument("--python", required=True)
+    parser.add_argument("--bounded-process", required=True)
+    parser.add_argument("--fixture", required=True)
+    parser.add_argument("--aici", required=True)
+    parser.add_argument("--output", required=True)
+    args ∈ object ← parser.parse_args()
+    output_name ∈ str ← args.output
+    ithon ∈ str ← args.ithon
+    host_python ∈ str ← args.python
+    bound ∈ str ← args.bounded_process
+    fixture ∈ str ← args.fixture
+    aici ∈ str ← args.aici
+    root ∈ Path ← Path(output_name).resolve()
+    root.mkdir(mode=448, parents=False, exist_ok=False)
+    source_name ∈ str ← sys._getframe().f_code.co_filename
+    source ∈ Path ← Path(source_name).resolve().parents.__getitem__(1).joinpath("tasks/android-diagnostic/2-capture.pi")
+    delivered ∈ Path ← root.joinpath("android-diagnostic.pi")
+    shutil.copyfile(source, delivered)
+    ledger ← "trial\tscenario\texpected\texit\tresult\n"
+    failures ← 0
+    for trial in ["first directory", "second 'directory'"]:
+        folder ∈ Path ← root.joinpath(trial)
+        folder.mkdir(mode=448)
+        for scenario in ["valid", "c67-valid", "adb-valid", "adb-server", "adb-connection", "frame-valid", "frame-header-only", "zoom-valid", "zoom-missing", "zoom-stale", "service", "unauthorized", "termux", "wrong-package", "no-pid", "multiple-pid", "changed-pid", "disappeared-pid", "reused-pid", "swapped-apk", "permission", "failed-producer", "timeout", "output-limit", "interrupted", "empty-log", "wrong-handset", "wrong-abi", "stale-profile", "unknown-profile", "changed-task", "changed-channel", "changed-apk-after", "changed-apk-path", "wrong-version"]:
+            case ∈ Path ← folder.joinpath(scenario)
+            case.mkdir(mode=448)
+            launcher ∈ Path ← case.joinpath("rish")
+            shutil.copyfile(fixture, launcher)
+            launcher.chmod(448)
+            case.joinpath("scenario.txt").write_text(scenario)
+            dex ∈ Path ← case.joinpath("rish_shizuku.dex")
+            dex.write_bytes(b"fixture-readonly-dex")
+            dex.chmod(256)
+            profile ∈ dict[str, str] ← dict()
+            profile.__setitem__("target", "phone")
+            profile.__setitem__("device_instance", "a1-fixture-one")
+            profile.__setitem__("expected_model_property", "MIRO A1")
+            profile.__setitem__("expected_serial_property", "fixture-instance-one")
+            profile.__setitem__("instance_binding", "ro.serialno")
+            profile.__setitem__("firmware", "fixture/firmware/one")
+            profile.__setitem__("abi", "armeabi-v7a")
+            if scenario == "c67-valid":
+                profile.__setitem__("abi", "arm64-v8a")
+            if scenario == "unknown-profile":
+                profile.__setitem__("firmware", "UNKNOWN")
+            profile_text ∈ str ← json.dumps(profile)
+            case.joinpath("profile.json").write_text(profile_text)
+            runtime ∈ dict[str, str] ← dict()
+            runtime.__setitem__("channel", "rish")
+            runtime.__setitem__("launcher", str(launcher))
+            runtime.__setitem__("launcher_sha256", sha(launcher))
+            runtime.__setitem__("dex", str(dex))
+            runtime.__setitem__("dex_sha256", sha(dex))
+            runtime.__setitem__("bounded_process", bound)
+            runtime.__setitem__("bounded_process_sha256", sha(Path(bound)))
+            if scenario.startswith("adb-"):
+                runtime.__setitem__("channel", "adb")
+                runtime.__setitem__("serial", "emulator-fixture")
+            runtime_text ∈ str ← json.dumps(runtime)
+            case.joinpath("runtime.json").write_text(runtime_text)
+            plan ∈ dict[str, str] ← dict()
+            plan.__setitem__("source_commit", "1111111111111111111111111111111111111111")
+            plan.__setitem__("target", "phone")
+            plan.__setitem__("device_instance", "a1-fixture-one")
+            plan.__setitem__("package", "org.isomorphisms.crystal.halite")
+            plan.__setitem__("claim", "crash-observation")
+            plan.__setitem__("permitted_actions", "observe")
+            plan.__setitem__("task_sha256", sha(delivered))
+            if scenario == "changed-task":
+                plan.__setitem__("task_sha256", "0000000000000000000000000000000000000000000000000000000000000000")
+            plan.__setitem__("version_code", "2")
+            if scenario == "wrong-version":
+                plan.__setitem__("version_code", "3")
+            plan.__setitem__("apk_sha256", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+            plan.__setitem__("observed_symptom", "reported wrong image")
+            plan.__setitem__("candidate_explanation", "unknown; log is supporting observation only")
+            plan.__setitem__("required_observable", "bounded-log")
+            plan.__setitem__("observable_producer", "CrystalProducer")
+            plan.__setitem__("producer_scope", "application-context")
+            plan.__setitem__("experiment", "finite observation without changing device state")
+            plan.__setitem__("repository", "functorial-games/crystal")
+            if scenario.startswith("zoom-"):
+                plan.__setitem__("claim", "zoom-state-observation")
+                plan.__setitem__("required_observable", "crystal-state-v1")
+                plan.__setitem__("observable_producer", "CrystalState")
+            if scenario.startswith("frame-"):
+                plan.__setitem__("claim", "frame-observation")
+                plan.__setitem__("required_observable", "frame")
+                plan.__setitem__("observable_producer", "screencap")
+                plan.__setitem__("producer_scope", "platform-frame")
+            plan_text ∈ str ← json.dumps(plan)
+            case.joinpath("plan.json").write_text(plan_text)
+            environment ∈ dict[str, str] ← dict()
+            environment.__setitem__("ITHON_PYTHON", host_python)
+            environment.__setitem__("PATH", "/usr/bin:/bin")
+            environment.__setitem__("HOME", str(case))
+            environment.__setitem__("ITHON_CHECK_RECEIPT", str(case.joinpath("checked.jsonl")))
+            sentinel ∈ Path ← case.joinpath("device-state")
+            sentinel.write_bytes(b"installed-package data; stopped service; retained logs")
+            sentinel_before ∈ str ← sha(sentinel)
+            command ∈ list[str] ← [ithon, str(delivered), "--plan", str(case.joinpath("plan.json")), "--profile", str(case.joinpath("profile.json")), "--runtime", str(case.joinpath("runtime.json")), "--output", str(case.joinpath("capture"))]
+            child ∈ CompletedProcess ← subprocess.run(command, env=environment, cwd=str(folder), capture_output=True)
+            code ∈ int ← child.returncode
+            stdout ∈ bytes ← child.stdout
+            stderr ∈ bytes ← child.stderr
+            case.joinpath("stdout").write_bytes(stdout)
+            case.joinpath("stderr").write_bytes(stderr)
+            expected ← "CAPTURED"
+            if scenario == "wrong-handset":
+                expected ← "PROFILE_CONFLICT:physical instance"
+            elif scenario == "wrong-abi":
+                expected ← "PROFILE_CONFLICT:ABI"
+            elif scenario == "stale-profile":
+                expected ← "PROFILE_FRESHNESS"
+            elif scenario == "unknown-profile":
+                expected ← "CURRENT_PROFILE_REQUIRED"
+            elif scenario == "changed-task":
+                expected ← "TASK_DIGEST_MISMATCH"
+            elif scenario == "changed-channel":
+                expected ← "RUNTIME_CHANGED:dex"
+            elif scenario == "changed-apk-after":
+                expected ← "ARTIFACT_CHANGED_DURING_CAPTURE"
+            elif scenario == "changed-apk-path":
+                expected ← "ARTIFACT_PATH_CHANGED_DURING_CAPTURE"
+            elif scenario == "wrong-version":
+                expected ← "VERSION_MISMATCH"
+            elif scenario == "service":
+                expected ← "SHIZUKU_SERVICE_UNAVAILABLE"
+            elif scenario == "adb-server":
+                expected ← "ADB_HOST_SERVER_UNAVAILABLE"
+            elif scenario == "adb-connection":
+                expected ← "ANDROID_ADB_CONNECTION_UNAVAILABLE"
+            elif scenario == "unauthorized":
+                expected ← "SHIZUKU_UNAUTHORIZED"
+            elif scenario == "termux":
+                expected ← "WRONG_CONTEXT"
+            elif scenario == "wrong-package":
+                expected ← "PACKAGE_NOT_INSTALLED_OR_AMBIGUOUS"
+            elif scenario == "no-pid":
+                expected ← "PID_ABSENT_OR_MULTIPLE"
+            elif scenario == "multiple-pid":
+                expected ← "PID_ABSENT_OR_MULTIPLE"
+            elif scenario == "changed-pid":
+                expected ← "PROCESS_CHANGED_OR_DISAPPEARED"
+            elif scenario == "disappeared-pid":
+                expected ← "PROCESS_CHANGED_OR_DISAPPEARED"
+            elif scenario == "reused-pid":
+                expected ← "PROCESS_CHANGED:pid reused"
+            elif scenario == "swapped-apk":
+                expected ← "INSTALLED_ARTIFACT_MISMATCH"
+            elif scenario == "permission":
+                expected ← "PERMISSION_FAILURE"
+            elif scenario == "failed-producer":
+                expected ← "PRODUCER_FAILURE:observation:7"
+            elif scenario == "timeout":
+                expected ← "CAPTURE_TIMEOUT"
+            elif scenario == "output-limit":
+                expected ← "CAPTURE_OUTPUT_LIMIT"
+            elif scenario == "interrupted":
+                expected ← "CAPTURE_INTERRUPTED_OR_SIGNAL"
+            elif scenario == "empty-log":
+                expected ← "EMPTY_OBSERVATION"
+            elif scenario == "zoom-missing":
+                expected ← "INSTRUMENTATION_GAP"
+            elif scenario == "zoom-stale":
+                expected ← "STALE_TELEMETRY"
+            matched ← False
+            if expected == "CAPTURED":
+                if code == 0:
+                    validate ∈ CompletedProcess ← subprocess.run([ithon, aici + "/android-diagnostic/check.pi", "--plan", str(case.joinpath("plan.json")), "--capture", str(case.joinpath("capture/capture.json")), "--output", str(case.joinpath("decision.json"))], env=environment, cwd=str(folder), capture_output=True)
+                    validate_code ∈ int ← validate.returncode
+                    case.joinpath("validator.stderr").write_bytes(validate.stderr)
+                    if scenario == "frame-header-only":
+                        invalid_frame ∈ bytes ← validate.stderr
+                        expected ← "INVALID_FRAME_FORMAT"
+                        if validate_code != 0:
+                            if invalid_frame.__contains__(b"INVALID_FRAME_FORMAT"):
+                                matched ← True
+                    elif validate_code == 0:
+                        matched ← True
+            else:
+                if code != 0:
+                    has_expected ∈ bool ← stderr.__contains__(expected.encode())
+                    if has_expected:
+                        matched ← True
+            result ← "PASS"
+            if sha(sentinel) != sentinel_before:
+                matched ← False
+            if scenario == "changed-task" or scenario == "unknown-profile":
+                if case.joinpath("capture").exists():
+                    matched ← False
+            if matched == False:
+                failures ← failures + 1
+                result ← "FAIL"
+            ledger ← ledger + trial + "\t" + scenario + "\t" + expected + "\t" + str(code) + "\t" + result + "\n"
+            root.joinpath("results.tsv").write_text(ledger)
+    print(ledger)
+    if failures != 0:
+        sys.exit(1)
+
+main()

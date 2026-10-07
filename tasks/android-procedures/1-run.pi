@@ -1,0 +1,239 @@
+"""Exact-byte owner delegation. Candidate fixture protocol, never an installer."""
+from argparse import ArgumentParser
+from pathlib import Path
+from builtins import dict, Exception, getattr
+import hashlib
+import re
+import subprocess
+import sys
+
+def sha(path ∈ Path) → str:
+    answer ∈ str ← hashlib.sha256(path.read_bytes()).hexdigest()
+    return answer
+
+def file(name ∈ str, expected ∈ str) → Path:
+    path ∈ Path ← Path(name)
+    is_absolute ∈ bool ← path.is_absolute()
+    is_file ∈ bool ← path.is_file()
+    if is_absolute == False or path.is_symlink() or is_file == False:
+        sys.exit("UNSAFE_FILE:" + name)
+    valid_digest ∈ bool ← bool(re.fullmatch(r"[0-9a-f]{64}", expected))
+    if valid_digest == False:
+        sys.exit("INVALID_DIGEST:" + name)
+    if sha(path) != expected:
+        sys.exit("FILE_DIGEST_MISMATCH:" + name)
+    return path
+
+def read(path ∈ Path, permitted ∈ list[str]) → dict[str, str]:
+    record ∈ dict[str, str] ← dict()
+    rows ∈ list[str] ← path.read_text().splitlines()
+    for row in rows:
+        values ∈ list[str] ← row.split("\t")
+        count ∈ int ← values.__len__()
+        if count != 2:
+            sys.exit("INVALID_TSV:" + str(path))
+        key ∈ str ← values.__getitem__(0)
+        value ∈ str ← values.__getitem__(1)
+        known ∈ bool ← permitted.__contains__(key)
+        if known == False:
+            sys.exit("UNKNOWN_FIELD:" + key)
+        if record.__contains__(key):
+            sys.exit("DUPLICATE_FIELD:" + key)
+        if value == "":
+            sys.exit("EMPTY_FIELD:" + key)
+        record.__setitem__(key, value)
+    return record
+
+def field(record ∈ dict[str, str], key ∈ str) → str:
+    value ∈ str ← record.get(key, "")
+    if value == "":
+        sys.exit("MISSING_FIELD:" + key)
+    return value
+
+def main() → None:
+    parser ∈ ArgumentParser ← ArgumentParser()
+    for argument in ["contract", "contract-sha256", "manifest", "plan", "plan-sha256", "profile", "profile-sha256", "requirements", "requirements-sha256", "runtime", "runtime-sha256", "location", "location-sha256", "route", "output"]:
+        parser.add_argument("--" + argument, required=True)
+    parser.add_argument("--registration", default="")
+    parser.add_argument("--registration-sha256", default="")
+    args ∈ object ← parser.parse_args()
+    contract_name ∈ str ← args.contract
+    contract_sha ∈ str ← args.contract_sha256
+    contract_path ∈ Path ← file(contract_name, contract_sha)
+    contract ∈ dict[str, str] ← read(contract_path, ["schema", "scope", "operation", "context", "source_commit", "manifest_sha256"])
+    if field(contract, "schema") != "kitchen-android-procedure-fixture-v1":
+        sys.exit("UNSUPPORTED_CONTRACT")
+    if field(contract, "scope") != "HOST_FIXTURE":
+        sys.exit("PREDECESSORS_UNQUALIFIED:S2/S3/S4 required")
+    if field(contract, "context") != "host-fixture":
+        sys.exit("WRONG_CONTEXT")
+    operation ∈ str ← field(contract, "operation")
+    operations ∈ list[str] ← ["materialize", "install-update", "capture"]
+    known_operation ∈ bool ← operations.__contains__(operation)
+    if known_operation == False:
+        sys.exit("UNSUPPORTED_OPERATION")
+    valid_source ∈ bool ← bool(re.fullmatch(r"[0-9a-f]{40}", field(contract, "source_commit")))
+    if valid_source == False:
+        sys.exit("INVALID_SOURCE_COMMIT")
+    manifest_name ∈ str ← args.manifest
+    manifest_path ∈ Path ← file(manifest_name, field(contract, "manifest_sha256"))
+    closure ∈ dict[str, str] ← dict()
+    identities ∈ dict[str, str] ← dict()
+    manifest_rows ∈ list[str] ← manifest_path.read_text().splitlines()
+    for row in manifest_rows:
+        columns ∈ list[str] ← row.split("\t")
+        count ∈ int ← columns.__len__()
+        if count != 3:
+            sys.exit("INVALID_MANIFEST")
+        role ∈ str ← columns.__getitem__(0)
+        valid_role ∈ bool ← bool(re.fullmatch(r"[a-z][a-z0-9-]*", role))
+        if valid_role == False or closure.__contains__(role):
+            sys.exit("INVALID_MANIFEST_ROLE:" + role)
+        path_name ∈ str ← columns.__getitem__(1)
+        digest ∈ str ← columns.__getitem__(2)
+        file(path_name, digest)
+        closure.__setitem__(role, path_name)
+        identities.__setitem__(role, digest)
+    for role in ["owner", "wrapper", "ithon", "grease", "bounded-process", "admission", "executor", "validator"]:
+        field(closure, role)
+    source_name ∈ str ← sys._getframe().f_code.co_filename
+    manifest_owner ∈ str ← str(Path(field(closure, "owner")).resolve())
+    executing_owner ∈ str ← str(Path(source_name).resolve())
+    if manifest_owner != executing_owner:
+        sys.exit("WRONG_OWNER")
+    bindings ∈ dict[str, str] ← dict()
+    bindings.__setitem__("contract_sha256", contract_sha)
+    input_names ∈ dict[str, str] ← dict()
+    input_digests ∈ dict[str, str] ← dict()
+    for key in ["plan", "profile", "requirements", "runtime", "location"]:
+        path_name ∈ str ← str(getattr(args, key))
+        digest ∈ str ← str(getattr(args, key + "_sha256"))
+        file(path_name, digest)
+        bindings.__setitem__(key + "_sha256", digest)
+        input_names.__setitem__(key, path_name)
+        input_digests.__setitem__(key, digest)
+    route ∈ str ← args.route
+    if route != "manual" and route != "registered":
+        sys.exit("INVALID_ROUTE")
+    registration_name ∈ str ← args.registration
+    registration_sha ∈ str ← args.registration_sha256
+    invocation ← "manual"
+    if route == "registered":
+        registration_path ∈ Path ← file(registration_name, registration_sha)
+        registration ∈ dict[str, str] ← read(registration_path, ["schema", "contract_sha256", "plan_sha256", "profile_sha256", "invocation_id"])
+        if field(registration, "schema") != "kitchen-fp-registration-fixture-v1":
+            sys.exit("REGISTRATION_BINDING:schema")
+        for key in ["contract_sha256", "plan_sha256", "profile_sha256"]:
+            if field(registration, key) != field(bindings, key):
+                sys.exit("REGISTRATION_BINDING:" + key)
+        invocation ← field(registration, "invocation_id")
+    elif registration_name != "" or registration_sha != "":
+        sys.exit("UNEXPECTED_REGISTRATION")
+    output_name ∈ str ← args.output
+    output ∈ Path ← Path(output_name)
+    absolute_output ∈ bool ← output.is_absolute()
+    if absolute_output == False or output.exists() or output.is_symlink():
+        sys.exit("UNSAFE_OUTPUT")
+    parent_directory ∈ bool ← output.parent.is_dir()
+    if parent_directory == False or output.parent.is_symlink():
+        sys.exit("UNSAFE_OUTPUT_PARENT")
+    output.mkdir(mode=448)
+    snapshots ∈ dict[str, str] ← dict()
+    for key in input_names:
+        source ∈ Path ← file(field(input_names, key), field(input_digests, key))
+        snapshot ∈ Path ← output.joinpath(key + ".input")
+        snapshot.write_bytes(source.read_bytes())
+        snapshot.chmod(256)
+        file(str(snapshot), field(input_digests, key))
+        snapshots.__setitem__(key, str(snapshot))
+    environment ∈ dict[str, str] ← dict()
+    environment.__setitem__("PATH", "/usr/bin:/bin")
+    environment.__setitem__("LANG", "C")
+    environment.__setitem__("TMPDIR", str(output))
+    ledger ∈ dict[str, str] ← dict()
+    ledger.__setitem__("schema", "kitchen-android-procedure-receipt-v1")
+    ledger.__setitem__("state", "FAILED")
+    ledger.__setitem__("evidence_class", "HOST_FIXTURE")
+    ledger.__setitem__("scope", route + "-owner-execution-fixture")
+    ledger.__setitem__("invocation_id", invocation)
+    ledger.__setitem__("operation", operation)
+    ledger.__setitem__("physical", "NOT_RUN")
+    ledger.__setitem__("installed_android_availability", "NOT_RUN")
+    ledger.__setitem__("owner_sha256", field(identities, "owner"))
+    ledger.__setitem__("wrapper_sha256", field(identities, "wrapper"))
+    ledger.__setitem__("manifest_sha256", sha(manifest_path))
+    for key in bindings:
+        ledger.__setitem__(key, field(bindings, key))
+    states ∈ dict[str, str] ← dict()
+    states.__setitem__("admission", "ADMITTED")
+    states.__setitem__("executor", "COMPLETED")
+    states.__setitem__("validator", "VALIDATED")
+    owner_receipt ∈ Path ← output.joinpath("owner.tsv")
+    for stage in ["admission", "executor", "validator"]:
+        for role in closure:
+            file(field(closure, role), field(identities, role))
+        file(contract_name, contract_sha)
+        file(manifest_name, field(contract, "manifest_sha256"))
+        for key in input_names:
+            file(field(input_names, key), field(input_digests, key))
+            file(field(snapshots, key), field(input_digests, key))
+        postcondition ∈ Path ← output.joinpath(stage + ".tsv")
+        stdout ∈ Path ← output.joinpath(stage + ".stdout")
+        stderr ∈ Path ← output.joinpath(stage + ".stderr")
+        status ∈ Path ← output.joinpath(stage + ".status.tsv")
+        argv ∈ list[str] ← [field(closure, "bounded-process"), "5", "1048576", str(stdout), str(stderr), str(status), "--", field(closure, stage), stage, "--operation", operation, "--output", str(postcondition), "--owner-receipt", str(owner_receipt)]
+        for key in snapshots:
+            argv.extend(["--" + key, field(snapshots, key)])
+        for key in bindings:
+            option ∈ str ← key.replace("_", "-")
+            argv.extend(["--" + option, field(bindings, key)])
+        expected_owner_receipt ← ""
+        if stage == "validator":
+            expected_owner_receipt ← sha(owner_receipt)
+        child ∈ subprocess.CompletedProcess ← subprocess.run(argv, cwd="/", env=environment)
+        code ∈ int ← child.returncode
+        ledger.__setitem__("last_stage", stage)
+        ledger.__setitem__("stage_exit_code", str(code))
+        rendered ← ""
+        for key in ledger:
+            rendered ← rendered + key + "\t" + field(ledger, key) + "\n"
+        output.joinpath("receipt.tsv").write_text(rendered)
+        if code != 0:
+            error ∈ str ← stderr.read_text(errors="replace")
+            if code == 124:
+                sys.exit("STAGE_TIMEOUT:" + stage)
+            print(error, file=sys.stderr)
+            sys.exit("STAGE_FAILED:" + stage + ":" + str(code))
+        postcondition_exists ∈ bool ← postcondition.is_file()
+        if postcondition_exists == False or postcondition.is_symlink():
+            sys.exit("POSTCONDITION_MISSING:" + stage)
+        admitted ∈ dict[str, str] ← read(postcondition, ["schema", "state", "operation", "contract_sha256", "plan_sha256", "profile_sha256", "requirements_sha256", "runtime_sha256", "location_sha256"])
+        admitted_state ∈ str ← admitted.get("state", "")
+        if admitted_state != field(states, stage):
+            sys.exit("POSTCONDITION_MISSING:" + stage)
+        if field(admitted, "schema") != "kitchen-owner-" + stage + "-fixture-v1" or field(admitted, "operation") != operation:
+            sys.exit("POSTCONDITION_BINDING:" + stage)
+        for key in bindings:
+            if field(admitted, key) != field(bindings, key):
+                sys.exit("POSTCONDITION_BINDING:" + key)
+        for role in closure:
+            file(field(closure, role), field(identities, role))
+        file(contract_name, contract_sha)
+        file(manifest_name, field(contract, "manifest_sha256"))
+        if stage == "validator":
+            file(str(owner_receipt), expected_owner_receipt)
+        for key in input_names:
+            file(field(input_names, key), field(input_digests, key))
+            file(field(snapshots, key), field(input_digests, key))
+        if stage == "executor":
+            owner_receipt.write_bytes(postcondition.read_bytes())
+            owner_receipt.chmod(256)
+        ledger.__setitem__(stage + "_receipt_sha256", sha(postcondition))
+    ledger.__setitem__("state", "PASS")
+    rendered ← ""
+    for key in ledger:
+        rendered ← rendered + key + "\t" + field(ledger, key) + "\n"
+    output.joinpath("receipt.tsv").write_text(rendered)
+    print(str(output.joinpath("receipt.tsv")))
+
+main()

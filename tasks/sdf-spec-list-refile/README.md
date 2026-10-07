@@ -123,3 +123,26 @@ Stages 1 and 2 are green in Idriç:
 Destructive copy, journal/recovery and source replacement are not yet promoted.
 The live SDF move remains blocked on those transaction tests and the read-only
 SDF locking/permission preflight.
+
+## Disposable hardening reference, 2026-10-06
+
+`requirements.md` states the operational handoff contract. `1.py` is the exact
+numbered wrapper; `test_handoff.py` executes it from unrelated directories,
+checks byte results, error propagation and reruns. `gate.py qualify` runs the
+wrapper suite, mbox's full reference suite including large resource fixtures,
+and actual edited-executor mutants before issuing a content/argument-bound TSV
+receipt. `verify` refuses any changed wrapper, parser, selector, fixture, tested
+path, source/destination role or mode. It emits a sealed argv record, not another
+shell wrapper. An outer untested wrapper is outside the receipt.
+
+The mbox Python reference is a narrow fallback corpus consumer: the maintained
+Idriç compiler/runtime was unavailable in this job, and Idriç's filesystem
+transaction effects remain unimplemented. Reference passes do not count as Idriç
+or D passes. The wrapper permits only read-only live plans and explicitly marked
+disposable transactions. Cat Food now provides `probes/sdf_mailbox.py` for actual
+NetBSD host evidence; this job did not execute it on SDF.
+
+Read-only scan candidate: locally qualified Python bytes, pending actual SDF
+Python/path/readability checks. Live move/archive: BLOCKED by target delivery
+locks, target execution and standard-bearer transaction implementation. The
+historical stage-1/2 Idriç results above are not new execution evidence.

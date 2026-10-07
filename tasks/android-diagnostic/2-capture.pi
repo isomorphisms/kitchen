@@ -1,0 +1,361 @@
+"""Private Android observation through a bounded native process boundary."""
+from argparse import ArgumentParser
+from pathlib import Path
+from builtins import dict, len, isinstance
+from subprocess import CompletedProcess
+import hashlib
+import json
+import re
+import subprocess
+import sys
+
+def field(record ∈ dict[str, object], name ∈ str) → str:
+    value ∈ str ← record.get(name, "")
+    is_text ∈ bool ← isinstance(value, str)
+    if is_text == False:
+        sys.exit("MISSING_INPUT:" + name)
+    if value == "":
+        sys.exit("MISSING_INPUT:" + name)
+    return value
+
+def sha(path ∈ Path) → str:
+    payload ∈ bytes ← path.read_bytes()
+    result ∈ str ← hashlib.sha256(payload).hexdigest()
+    return result
+
+def exists(path ∈ Path) → bool:
+    result ∈ bool ← path.is_file()
+    return result
+
+def absolute(path ∈ Path) → bool:
+    result ∈ bool ← path.is_absolute()
+    return result
+
+def length(values ∈ list[str]) → int:
+    result ∈ int ← len(values)
+    return result
+
+def main() → None:
+    parser ∈ ArgumentParser ← ArgumentParser(description="Bounded identity-bound Android capture")
+    parser.add_argument("--plan", required=True)
+    parser.add_argument("--profile", required=True)
+    parser.add_argument("--runtime", required=True)
+    parser.add_argument("--output", required=True)
+    args ∈ object ← parser.parse_args()
+    plan_name ∈ str ← args.plan
+    profile_name ∈ str ← args.profile
+    runtime_name ∈ str ← args.runtime
+    output_name ∈ str ← args.output
+    source_name ∈ str ← sys._getframe().f_code.co_filename
+    plan_digest ∈ str ← sha(Path(plan_name))
+    profile_digest ∈ str ← sha(Path(profile_name))
+    runtime_digest ∈ str ← sha(Path(runtime_name))
+    plan ∈ dict[str, object] ← json.loads(Path(plan_name).read_text())
+    profile ∈ dict[str, object] ← json.loads(Path(profile_name).read_text())
+    runtime ∈ dict[str, object] ← json.loads(Path(runtime_name).read_text())
+    if sha(Path(source_name)) != field(plan, "task_sha256"):
+        sys.exit("TASK_DIGEST_MISMATCH")
+    for current_key in ["expected_model_property", "expected_serial_property", "firmware", "abi"]:
+        current_value ∈ str ← field(profile, current_key)
+        if current_value == "UNKNOWN":
+            sys.exit("CURRENT_PROFILE_REQUIRED:" + current_key)
+    if field(profile, "instance_binding") != "ro.serialno":
+        sys.exit("CURRENT_PROFILE_REQUIRED:ro.serialno identity domain")
+    if absolute(Path(field(runtime, "bounded_process"))) == False:
+        sys.exit("MISSING_INPUT:absolute bounded process")
+    package ∈ str ← field(plan, "package")
+    valid ∈ bool ← bool(re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+", package))
+    if valid == False:
+        sys.exit("INVALID_PACKAGE")
+    if package.__contains__("whatever"):
+        sys.exit("PLACEHOLDER_PACKAGE")
+    if field(plan, "permitted_actions") != "observe":
+        sys.exit("UNSUPPORTED_ACTION: this version only observes")
+    for key in ["target", "device_instance"]:
+        if field(plan, key) != field(profile, key):
+            sys.exit("PROFILE_CONFLICT:" + key)
+    mode ∈ str ← field(runtime, "channel")
+    if mode != "rish":
+        if mode != "adb":
+            sys.exit("WRONG_CONTEXT:Termux process is not Android shell authority")
+    launcher ∈ Path ← Path(field(runtime, "launcher"))
+    bound ∈ Path ← Path(field(runtime, "bounded_process"))
+    if absolute(launcher) == False:
+        sys.exit("MISSING_INPUT:absolute channel launcher")
+    if exists(launcher) == False:
+        sys.exit("LAUNCHER_MISSING")
+    if sha(launcher) != field(runtime, "launcher_sha256"):
+        sys.exit("LAUNCHER_DIGEST_MISMATCH")
+    if exists(bound) == False:
+        sys.exit("BOUNDED_RUNTIME_MISSING:no phone-side compilation")
+    if sha(bound) != field(runtime, "bounded_process_sha256"):
+        sys.exit("RUNTIME_DIGEST_MISMATCH")
+    if mode == "rish":
+        dex ∈ Path ← Path(field(runtime, "dex"))
+        if exists(dex) == False:
+            sys.exit("RISH_DEX_MISSING")
+        if sha(dex) != field(runtime, "dex_sha256"):
+            sys.exit("RISH_DEX_DIGEST_MISMATCH")
+    root ∈ Path ← Path(output_name).resolve()
+    root.mkdir(mode=448, parents=False, exist_ok=False)
+    environment ∈ dict[str, str] ← dict()
+    environment.__setitem__("PATH", "/system/bin:/usr/bin:/bin")
+    environment.__setitem__("HOME", str(root))
+    environment.__setitem__("LANG", "C")
+    environment.__setitem__("TMPDIR", str(root))
+    # Capture metadata starts incomplete and is updated after each bound stage.
+    record ∈ dict[str, object] ← dict()
+    for key in ["source_commit", "target", "device_instance", "package", "claim", "task_sha256"]:
+        record.__setitem__(key, field(plan, key))
+    record.__setitem__("state", "NOT_RUN")
+    record.__setitem__("profile_sha256", sha(Path(profile_name)))
+    record.__setitem__("plan_sha256", plan_digest)
+    record.__setitem__("runtime_sha256", runtime_digest)
+    record.__setitem__("physical_instance_binding", profile.get("instance_binding", "DECLARED_NOT_OBSERVED"))
+    record.__setitem__("evidence_class", "bounded-observation")
+    record.__setitem__("launcher_integrity", "FILE_DIGEST_MATCH")
+    record.__setitem__("rish_dex_semantic_validity", "NOT_VERIFIED")
+    record.__setitem__("shizuku_authorization", "NOT_OBSERVED")
+    record.__setitem__("shizuku_service", "NOT_OBSERVED")
+    record.__setitem__("adb_host_server", "NOT_OBSERVED")
+    record.__setitem__("android_adb_connection", "NOT_OBSERVED")
+    steps ∈ list[str] ← ["authority", "device-model", "device-instance", "abi", "firmware", "package", "apk-path", "apk-before", "version", "pid-before", "start-before", "observation", "pid-after", "start-after", "apk-path-after", "apk-after", "device-model-after", "device-instance-after", "abi-after", "firmware-after"]
+    pid ← ""
+    apk_path ← ""
+    observation ∈ Path ← root.joinpath("observation.stdout")
+    for step in steps:
+        if sha(Path(plan_name)) != plan_digest or sha(Path(profile_name)) != profile_digest or sha(Path(runtime_name)) != runtime_digest:
+            sys.exit("INPUT_CHANGED_DURING_CAPTURE")
+        for runtime_key in ["launcher", "bounded_process"]:
+            if sha(Path(field(runtime, runtime_key))) != field(runtime, runtime_key + "_sha256"):
+                sys.exit("RUNTIME_CHANGED:" + runtime_key)
+        if mode == "rish":
+            if sha(Path(field(runtime, "dex"))) != field(runtime, "dex_sha256"):
+                sys.exit("RUNTIME_CHANGED:dex")
+        command ← "/system/bin/id -u"
+        if step == "device-model" or step == "device-model-after":
+            command ← "/system/bin/getprop ro.product.model"
+        elif step == "device-instance" or step == "device-instance-after":
+            command ← "/system/bin/getprop ro.serialno"
+        elif step == "abi" or step == "abi-after":
+            command ← "/system/bin/getprop ro.product.cpu.abilist"
+        elif step == "firmware" or step == "firmware-after":
+            command ← "/system/bin/getprop ro.build.fingerprint"
+        elif step == "package":
+            command ← "/system/bin/cmd package list packages " + package
+        elif step == "apk-path" or step == "apk-path-after":
+            command ← "/system/bin/pm path " + package
+        elif step == "apk-before":
+            command ← "/system/bin/toybox sha256sum " + apk_path
+        elif step == "apk-after":
+            command ← "/system/bin/toybox sha256sum " + apk_path
+        elif step == "version":
+            command ← "/system/bin/dumpsys package " + package
+        elif step == "pid-before":
+            command ← "/system/bin/pidof " + package
+        elif step == "pid-after":
+            command ← "/system/bin/pidof " + package
+        elif step == "start-before":
+            command ← "/system/bin/cat /proc/" + pid + "/stat"
+        elif step == "start-after":
+            command ← "/system/bin/cat /proc/" + pid + "/stat"
+        elif step == "observation":
+            claim ∈ str ← field(plan, "claim")
+            if claim == "frame-observation":
+                command ← "/system/bin/screencap -p"
+            elif claim == "crash-observation":
+                command ← "/system/bin/logcat -d -t 200 --pid=" + pid
+            elif claim == "zoom-state-observation":
+                command ← "/system/bin/logcat -d -v raw -t 200 --pid=" + pid + " -s CrystalState:I"
+            else:
+                sys.exit("UNSUPPORTED_CLAIM")
+        child_args ∈ list[str] ← [str(launcher), "-c", command]
+        if mode == "adb":
+            serial ∈ str ← field(runtime, "serial")
+            valid_serial ∈ bool ← bool(re.fullmatch(r"[A-Za-z0-9_.:-]+", serial))
+            if valid_serial == False:
+                sys.exit("INVALID_ADB_SERIAL")
+            child_args ← [str(launcher), "-s", serial, "exec-out", command]
+        stdout ∈ Path ← root.joinpath(step + ".stdout")
+        stderr ∈ Path ← root.joinpath(step + ".stderr")
+        status ∈ Path ← root.joinpath(step + ".status.tsv")
+        argv ∈ list[str] ← [str(bound), "5", "1048576", str(stdout), str(stderr), str(status), "--"]
+        argv.extend(child_args)
+        child ∈ CompletedProcess ← subprocess.run(argv, env=environment, cwd="/")
+        code ∈ int ← child.returncode
+        record.__setitem__("last_stage", step)
+        record.__setitem__("producer_exit_code", str(code))
+        record.__setitem__("state", "CAPTURE_FAILURE")
+        record_text ∈ str ← json.dumps(record, sort_keys=True, indent=2)
+        root.joinpath("capture.json").write_text(record_text)
+        if code != 0:
+            if step == "pid-before":
+                if code == 1:
+                    missing_pid ∈ bytes ← stdout.read_bytes()
+                    if missing_pid == b"":
+                        sys.exit("PID_ABSENT_OR_MULTIPLE:no running process")
+            if step == "pid-after":
+                if code == 1:
+                    sys.exit("PROCESS_CHANGED_OR_DISAPPEARED")
+            error ∈ str ← stderr.read_text(errors="replace")
+            if error.__contains__("cannot connect to daemon"):
+                sys.exit("ADB_HOST_SERVER_UNAVAILABLE")
+            if error.__contains__("device offline") or error.__contains__("no devices/emulators found"):
+                sys.exit("ANDROID_ADB_CONNECTION_UNAVAILABLE")
+            if error.__contains__("Could not find or load main class") or error.__contains__("Error opening dex file"):
+                sys.exit("RISH_LAUNCHER_OR_DEX_INVALID")
+            if error.__contains__("Server is not running"):
+                sys.exit("SHIZUKU_SERVICE_UNAVAILABLE:DEX validity is separate")
+            if error.__contains__("not authorized"):
+                sys.exit("SHIZUKU_UNAUTHORIZED")
+            if error.__contains__("Permission denied"):
+                sys.exit("PERMISSION_FAILURE:" + step)
+            if code == 124:
+                sys.exit("CAPTURE_TIMEOUT:" + step)
+            if code == 122:
+                sys.exit("CAPTURE_OUTPUT_LIMIT:" + step)
+            if code >= 128:
+                sys.exit("CAPTURE_INTERRUPTED_OR_SIGNAL:" + step)
+            sys.exit("PRODUCER_FAILURE:" + step + ":" + str(code))
+        payload ∈ bytes ← stdout.read_bytes()
+        text ∈ str ← payload.decode(errors="replace").strip()
+        if step == "authority":
+            if text != "2000":
+                if text != "0":
+                    sys.exit("WRONG_CONTEXT:Android shell/root authority required")
+            record.__setitem__("effective_uid", text)
+            record.__setitem__("channel", mode)
+            if mode == "rish":
+                record.__setitem__("shizuku_authorization", "BOUND_COMMAND_SUCCEEDED")
+                record.__setitem__("shizuku_service", "BOUND_COMMAND_SUCCEEDED")
+            else:
+                record.__setitem__("android_adb_connection", "BOUND_COMMAND_SUCCEEDED")
+                record.__setitem__("adb_host_server", "COMMAND_TRANSPORT_SUCCEEDED; startup cause UNKNOWN")
+            # A successful authority command does not attribute service startup.
+        elif step == "device-instance" or step == "device-instance-after":
+            if text != field(profile, "expected_serial_property"):
+                sys.exit("PROFILE_CONFLICT:physical instance")
+            record.__setitem__("observed_serial_property", text)
+            record.__setitem__("physical_instance_binding", "CURRENT_CHANNEL:ro.serialno")
+        elif step == "abi" or step == "abi-after":
+            observed_abis ∈ list[str] ← text.split(",")
+            supported_abi ∈ bool ← observed_abis.__contains__(field(profile, "abi"))
+            if supported_abi == False:
+                sys.exit("PROFILE_CONFLICT:ABI")
+            record.__setitem__("observed_abi_list", text)
+            record.__setitem__("selected_abi", field(profile, "abi"))
+        elif step == "device-model" or step == "device-model-after":
+            record.__setitem__("observed_model_property", text)
+            expected_model ∈ str ← profile.get("expected_model_property", "UNKNOWN")
+            if expected_model != "UNKNOWN":
+                if expected_model != text:
+                    sys.exit("PROFILE_CONFLICT:current model property")
+        elif step == "firmware" or step == "firmware-after":
+            record.__setitem__("observed_build_fingerprint", text)
+            known_firmware ∈ str ← profile.get("firmware", "UNKNOWN")
+            if known_firmware != "UNKNOWN":
+                if known_firmware != text:
+                    sys.exit("PROFILE_FRESHNESS:firmware changed")
+        elif step == "package":
+            packages ∈ list[str] ← text.splitlines()
+            exact ← 0
+            for row in packages:
+                if row == "package:" + package:
+                    exact ← exact + 1
+            if exact != 1:
+                sys.exit("PACKAGE_NOT_INSTALLED_OR_AMBIGUOUS")
+        elif step == "apk-path" or step == "apk-path-after":
+            paths ∈ list[str] ← text.splitlines()
+            if length(paths) != 1:
+                sys.exit("APK_PATH_AMBIGUOUS:split APKs are not admitted")
+            observed_apk_path ∈ str ← text.removeprefix("package:")
+            if step == "apk-path-after":
+                if observed_apk_path != apk_path:
+                    sys.exit("ARTIFACT_PATH_CHANGED_DURING_CAPTURE")
+            else:
+                apk_path ← observed_apk_path
+            valid_path ∈ bool ← bool(re.fullmatch(r"/data/app/[A-Za-z0-9_./=+~-]+/base\.apk", apk_path))
+            if valid_path == False:
+                sys.exit("APK_PATH_UNSUPPORTED")
+        elif step == "apk-before":
+            if text == "":
+                sys.exit("INSTALLED_ARTIFACT_IDENTITY_UNAVAILABLE")
+            installed ∈ str ← text.split().__getitem__(0)
+            if installed != field(plan, "apk_sha256"):
+                sys.exit("INSTALLED_ARTIFACT_MISMATCH")
+            record.__setitem__("installed_apk_sha256", installed)
+        elif step == "apk-after":
+            if text == "":
+                sys.exit("ARTIFACT_IDENTITY_DISAPPEARED")
+            current_apk ∈ str ← text.split().__getitem__(0)
+            if current_apk != field(plan, "apk_sha256"):
+                sys.exit("ARTIFACT_CHANGED_DURING_CAPTURE")
+        elif step == "version":
+            versions ∈ list[str] ← re.findall(r"versionCode=([0-9]+)", text)
+            if length(versions) != 1:
+                sys.exit("VERSION_IDENTITY_AMBIGUOUS")
+            record.__setitem__("version_code", versions.__getitem__(0))
+            observed_version ∈ str ← versions.__getitem__(0)
+            if observed_version != field(plan, "version_code"):
+                sys.exit("VERSION_MISMATCH")
+        elif step == "pid-before":
+            valid_pid ∈ bool ← bool(re.fullmatch(r"[1-9][0-9]*", text))
+            if valid_pid == False:
+                sys.exit("PID_ABSENT_OR_MULTIPLE")
+            pid ← text
+            record.__setitem__("pid_before", pid)
+        elif step == "pid-after":
+            if text != pid:
+                sys.exit("PROCESS_CHANGED_OR_DISAPPEARED")
+            record.__setitem__("pid_after", text)
+        elif step == "start-before":
+            stat_tail ∈ str ← text.rpartition(")").__getitem__(2)
+            stat_fields ∈ list[str] ← stat_tail.split()
+            if length(stat_fields) < 20:
+                sys.exit("PROCESS_START_UNAVAILABLE")
+            record.__setitem__("process_start_before", stat_fields.__getitem__(19))
+        elif step == "start-after":
+            after_tail ∈ str ← text.rpartition(")").__getitem__(2)
+            after_fields ∈ list[str] ← after_tail.split()
+            if length(after_fields) < 20:
+                sys.exit("PROCESS_START_UNAVAILABLE")
+            before_start ∈ str ← record.get("process_start_before", "")
+            after_start ∈ str ← after_fields.__getitem__(19)
+            if before_start != after_start:
+                sys.exit("PROCESS_CHANGED:pid reused")
+            record.__setitem__("process_start_after", after_start)
+        elif step == "observation":
+            if payload == b"":
+                if field(plan, "claim") == "zoom-state-observation":
+                    sys.exit("INSTRUMENTATION_GAP:CrystalState emitted no state")
+                sys.exit("EMPTY_OBSERVATION")
+            if field(plan, "claim") == "zoom-state-observation":
+                selected ← ""
+                log_lines ∈ list[str] ← text.splitlines()
+                for line in log_lines:
+                    if line.startswith('{"schema":"crystal-state-v1"'):
+                        selected ← line
+                if selected == "":
+                    sys.exit("INSTRUMENTATION_GAP:no CrystalState JSON snapshot")
+                snapshot ∈ dict[str, object] ← json.loads(selected)
+                expected_session ∈ str ← pid + "-" + field(record, "process_start_before")
+                if field(snapshot, "session") != expected_session:
+                    sys.exit("STALE_TELEMETRY:process session mismatch")
+                observation ∈ Path ← root.joinpath("application-state.json")
+                observation.write_text(selected + "\n")
+            record.__setitem__("observation_path", str(observation))
+            record.__setitem__("observation_sha256", sha(observation))
+    for final_key in ["launcher", "bounded_process"]:
+        if sha(Path(field(runtime, final_key))) != field(runtime, final_key + "_sha256"):
+            sys.exit("RUNTIME_CHANGED:" + final_key)
+    if mode == "rish":
+        if sha(Path(field(runtime, "dex"))) != field(runtime, "dex_sha256"):
+            sys.exit("RUNTIME_CHANGED:dex")
+    if sha(Path(plan_name)) != plan_digest or sha(Path(profile_name)) != profile_digest or sha(Path(runtime_name)) != runtime_digest:
+        sys.exit("INPUT_CHANGED_DURING_CAPTURE")
+    record.__setitem__("state", "CAPTURED")
+    complete_text ∈ str ← json.dumps(record, sort_keys=True, indent=2)
+    root.joinpath("capture.json").write_text(complete_text)
+    print(str(root.joinpath("capture.json")))
+
+main()
