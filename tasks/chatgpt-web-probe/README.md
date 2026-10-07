@@ -39,3 +39,17 @@ under `/data/local/tmp`, installs, launches the exact NativeActivity component,
 and fails unless a WebView DevTools socket appears.
 
 The Flexible Pipes bundle includes this installer, `artifacts.tsv`, and the exact pinned Cat Food target selector. The script observes product/model/ABI through Rish, lets Cat Food select `phone` or `c67`, verifies the selected APK digest, installs it, launches the NativeActivity, and requires a WebView DevTools socket.
+
+
+## install-run.sh
+
+This is the normal human entry point after a successful Flexible Pipes run:
+
+```sh
+bash tasks/chatgpt-web-probe/install-run.sh RUN_ID
+```
+
+It downloads only the named `chatgpt-web-probe-paired` artifact from
+`isomorphisms/flexible-pipes`, requires the expected bundle files, and then
+hands the bundle to `install.sh`. The selected APK still comes from Cat Food's
+observed device identity, not from the caller.
