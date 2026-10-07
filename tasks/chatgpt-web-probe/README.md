@@ -38,5 +38,4 @@ It verifies that the input exists before crossing the shell boundary, stages it
 under `/data/local/tmp`, installs, launches the exact NativeActivity component,
 and fails unless a WebView DevTools socket appears.
 
-It does not download an artifact or guess whether the phone is A1 or C67.
-Artifact selection belongs to the Cat Food/Flexible Pipes handoff.
+The Flexible Pipes bundle includes this installer, `artifacts.tsv`, and the exact pinned Cat Food target selector. The script observes product/model/ABI through Rish, lets Cat Food select `phone` or `c67`, verifies the selected APK digest, installs it, launches the NativeActivity, and requires a WebView DevTools socket.
