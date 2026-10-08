@@ -42,6 +42,13 @@ successful and failing children. Disposable API observations are checked by
 AICI's maintained `validators/kitchen-transfer-script.pi`. The local diagnostic
 is explicitly narrower than FP's hosted worker-isolation acceptance.
 
+The local diagnostic accepts an optional final input-file argument with the same
+six data fields. It uses the maintained generator and tests the resulting exact
+parameterized bytes. Omitting that file retains the synthetic sample control.
+Its receipt records inputs and generator/candidate/launcher hashes; the launcher
+hash alone is not complete runtime qualification. This diagnostic never executes
+a real transfer, promotes an operation, or establishes phone compatibility.
+
 Candidates 1–8 and their failure notes are retained. Candidate 1 and the
 `generate-transfer-github-repository-script-legacy-1.sh` producer are historical
 POSIX debt, not a qualification for transfer orchestration. The temporary-source-

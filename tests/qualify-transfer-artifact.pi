@@ -23,27 +23,36 @@ bridge ∈ str ← "#!" + launcher + "\nexec /usr/bin/env -u PYTHONHOME -u PYTHO
 Path(output + "/bin/gh").write_text(bridge)
 os.chmod(output + "/bin/gh", 365)
 inputs ∈ dict[str, object] ← {"source_owner": "source", "repository": "sample", "destination_owner": "destination", "expected_login": "login", "expected_repository_id": 123, "target_context": "linux-x86_64-grease-v1"}
+fields ∈ list[str] ← ["source_owner", "repository", "destination_owner", "expected_login", "expected_repository_id", "target_context"]
+if len(argv) > 5:
+    inputs ← json.loads(Path(argv[5]).read_bytes())
+if set(inputs) != set(fields):
+    raise ValueError("INPUT_FIELDS")
+filename ∈ str ← "transfer-" + str(inputs["repository"]) + "-from-" + str(inputs["source_owner"]) + "-to-" + str(inputs["destination_owner"]) + ".sh"
 artifacts ∈ list[bytes] ← []
 for index in range(2):
     work ∈ str ← output + "/generation space '" + str(index)
     Path(work).mkdir()
-    child ∈ object ← subprocess.run([launcher, task + "/generate-transfer-github-repository-script.sh", "source", "sample", "destination", "login", "123", "linux-x86_64-grease-v1"], cwd=work, env=environment, capture_output=True, timeout=10)
+    generation ∈ list[str] ← [launcher, task + "/generate-transfer-github-repository-script.sh"]
+    for field in fields:
+        generation.append(str(inputs[field]))
+    child ∈ object ← subprocess.run(generation, cwd=work, env=environment, capture_output=True, timeout=10)
     Path(work + "/stdout.bin").write_bytes(child.stdout)
     Path(work + "/stderr.bin").write_bytes(child.stderr)
     code ∈ int ← child.returncode
     if code != 0:
         raise ValueError("generation failed")
-    artifacts.append(Path(work + "/transfer-sample-from-source-to-destination.sh").read_bytes())
+    artifacts.append(Path(work + "/" + filename).read_bytes())
 if artifacts[0] != artifacts[1]:
     raise ValueError("generation was not deterministic")
-artifact ∈ str ← output + "/transfer-sample-from-source-to-destination.sh"
+artifact ∈ str ← output + "/" + filename
 Path(artifact).write_bytes(artifacts[0])
 digest ∈ str ← hashlib.sha256(artifacts[0]).hexdigest()
 decisions ∈ list[dict[str, object]] ← []
 for mode in ["personal", "organization", "accepted-unverified", "accepted-still-pending", "visibility", "post-failure", "wrong-id", "collision", "authentication", "capability", "network", "destination-authentication", "destination-api"]:
     base ∈ str ← output + "/" + mode
     Path(base).mkdir()
-    executed_artifact ∈ str ← base + "/transfer-sample-from-source-to-destination.sh"
+    executed_artifact ∈ str ← base + "/" + filename
     Path(executed_artifact).write_bytes(artifacts[0])
     os.chmod(executed_artifact, 292)
     os.mkfifo(base + "/request")
@@ -95,5 +104,5 @@ for mode in ["personal", "organization", "accepted-unverified", "accepted-still-
             except ProcessLookupError:
                 pass
             server.wait()
-Path(output + "/result.json").write_text(json.dumps({"status": "PASS", "scope": "local-artifact-diagnostic", "excluded_claims": ["worker-isolation", "trusted-execution", "deployment", "live-transfer"], "artifact_sha256": digest, "fixtures": decisions}, sort_keys=True))
+Path(output + "/result.json").write_text(json.dumps({"status": "PASS", "scope": "local-artifact-diagnostic", "excluded_claims": ["worker-isolation", "trusted-execution", "deployment", "live-transfer"], "inputs": inputs, "artifact_sha256": digest, "generator_sha256": hashlib.sha256(Path(task + "/generate-transfer-github-repository-script.sh").read_bytes()).hexdigest(), "candidate_sha256": hashlib.sha256(Path(task + "/9.sh").read_bytes()).hexdigest(), "launcher_sha256": hashlib.sha256(Path(launcher).read_bytes()).hexdigest(), "fixtures": decisions}, sort_keys=True))
 print("local artifact diagnostic passed")
