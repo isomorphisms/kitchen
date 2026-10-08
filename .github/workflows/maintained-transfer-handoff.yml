@@ -1,0 +1,66 @@
+name: Maintained transfer handoff diagnostic
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  handoff:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: kitchen
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dilapidated-shed/ithon
+          ref: d6e83969f82512e920fb17b44326cb54f31d015c
+          path: ithon
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/ai-ci
+          ref: b1190d623dd180b4f465d5bdfc04f3cfc4306aa1
+          path: ai-ci
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: isomorphisms/catfood
+          ref: b1d006e5ebc00a01283e5c5dda9b8660e9c73741
+          path: catfood
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dilapidated-shed/grease
+          ref: f19c94c6df18cddbdc1e81463e5bd689533e3c13
+          submodules: recursive
+          path: runtime/grease
+          persist-credentials: false
+      - name: Build the existing Cat Food Grease runtime
+        env:
+          CATFOOD_ROOT: ${{ github.workspace }}/runtime
+          CATFOOD_JOBS: '2'
+        run: /bin/sh catfood/build-tools.sh
+      - name: Exercise both exact generated presentations in disposable fixtures
+        shell: /usr/bin/env runtime/.build/grease/bin/grease {0}
+        env:
+          ITHON_CHECK_RECEIPT: /tmp/kitchen-ithon-checks.jsonl
+        run: |
+          sudo mkdir -p /opt/catfood/bin
+          sudo ln -s '${{ github.workspace }}/runtime/.build/grease/bin/grease' /opt/catfood/bin/grease
+          /usr/bin/python3 ithon/ithon_host.py kitchen/tests/qualify-transfer-artifact.pi '${{ github.workspace }}' /tmp/kitchen-standalone '${{ github.workspace }}/runtime/.build/grease/bin/grease' '${{ github.workspace }}/runtime/grease/source' '${{ github.workspace }}/kitchen/evidence/fp-control-02/young-tableaux-inputs.json'
+          /usr/bin/python3 ithon/ithon_host.py kitchen/tests/qualify-transfer-artifact.pi '${{ github.workspace }}' /tmp/kitchen-paste '${{ github.workspace }}/runtime/.build/grease/bin/grease' '${{ github.workspace }}/runtime/grease/source' '${{ github.workspace }}/kitchen/evidence/fp-control-02/young-tableaux-inputs.json' paste
+          /usr/bin/python3 ithon/ithon_host.py kitchen/tests/qualify-transfer-artifact.pi '${{ github.workspace }}' /tmp/kitchen-bash-parent '${{ github.workspace }}/runtime/.build/grease/bin/grease' '${{ github.workspace }}/runtime/grease/source' '${{ github.workspace }}/kitchen/evidence/fp-control-02/young-tableaux-inputs.json' paste bash
+      - name: Preserve partial, failed and verified fixture state
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: kitchen-handoff-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            /tmp/kitchen-standalone
+            /tmp/kitchen-paste
+            /tmp/kitchen-bash-parent
+            /tmp/kitchen-ithon-checks.jsonl
+          if-no-files-found: error

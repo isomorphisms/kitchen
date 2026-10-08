@@ -3,8 +3,13 @@ import json
 import sys
 import os
 from builtins import open
+from pathlib import Path
 environment ∈ dict[str, str] ← os.environ
 argv ∈ list[str] ← sys.argv
+generation_record ∈ object ← environment.get("FP_GENERATION_OBSERVATIONS")
+if generation_record != None:
+    Path(str(generation_record)).write_text(json.dumps({"argv": argv[1:], "generation_api_attempt": True}))
+    sys.exit(97)
 root ∈ str ← environment["FP_FIXTURE_IO"]
 override ∈ bool ← False
 for name in ["GH_TOKEN", "GITHUB_TOKEN", "GH_HOST"]:

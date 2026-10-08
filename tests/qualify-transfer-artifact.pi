@@ -28,7 +28,22 @@ if len(argv) > 5:
     inputs ← json.loads(Path(argv[5]).read_bytes())
 if set(inputs) != set(fields):
     raise ValueError("INPUT_FIELDS")
-filename ∈ str ← "transfer-" + str(inputs["repository"]) + "-from-" + str(inputs["source_owner"]) + "-to-" + str(inputs["destination_owner"]) + ".sh"
+presentation ∈ str ← argv[6] if len(argv) > 6 else "standalone"
+parent_kind ∈ str ← argv[7] if len(argv) > 7 else "grease"
+if parent_kind != "grease" and parent_kind != "bash":
+    raise ValueError("PARENT_CONTEXT")
+if presentation != "standalone" and presentation != "paste":
+    raise ValueError("PRESENTATION")
+if presentation == "paste":
+    installed_runtime ∈ bytes ← Path("/opt/catfood/bin/grease").read_bytes()
+    selected_runtime ∈ bytes ← Path(launcher).read_bytes()
+    if installed_runtime != selected_runtime:
+        raise ValueError("PASTE_RUNTIME_IDENTITY")
+    acquisition_bridge ∈ str ← "#!" + launcher + "\nexec /usr/bin/env -u PYTHONHOME -u PYTHONPATH /usr/bin/python3 " + workspace + "/ithon/ithon_host.py " + task + '/fixture-acquisition.pi ' + task + '/transfer-github-repository.grease "$@"\n'
+    Path(output + "/bin/curl").write_text(acquisition_bridge)
+    os.chmod(output + "/bin/curl", 365)
+suffix ∈ str ← ".paste.grease" if presentation == "paste" else ".sh"
+filename ∈ str ← "transfer-" + str(inputs["repository"]) + "-from-" + str(inputs["source_owner"]) + "-to-" + str(inputs["destination_owner"]) + suffix
 artifacts ∈ list[bytes] ← []
 for index in range(2):
     work ∈ str ← output + "/generation space '" + str(index)
@@ -36,20 +51,23 @@ for index in range(2):
     generation ∈ list[str] ← [launcher, task + "/generate-transfer-github-repository-script.sh"]
     for field in fields:
         generation.append(str(inputs[field]))
-    child ∈ object ← subprocess.run(generation, cwd=work, env=environment, capture_output=True, timeout=10)
+    generation_environment ∈ dict[str, str] ← dict(environment)
+    generation_environment["FP_GENERATION_OBSERVATIONS"] ← work + "/api-attempts.json"
+    child ∈ object ← subprocess.run(generation, cwd=work, env=generation_environment, capture_output=True, timeout=10)
     Path(work + "/stdout.bin").write_bytes(child.stdout)
     Path(work + "/stderr.bin").write_bytes(child.stderr)
     code ∈ int ← child.returncode
-    if code != 0:
+    if code != 0 or Path(work + "/api-attempts.json").exists():
         raise ValueError("generation failed")
     artifacts.append(Path(work + "/" + filename).read_bytes())
 if artifacts[0] != artifacts[1]:
     raise ValueError("generation was not deterministic")
 artifact ∈ str ← output + "/" + filename
 Path(artifact).write_bytes(artifacts[0])
+artifact_text ∈ str ← artifacts[0].decode()
 digest ∈ str ← hashlib.sha256(artifacts[0]).hexdigest()
 decisions ∈ list[dict[str, object]] ← []
-for mode in ["personal", "organization", "accepted-unverified", "accepted-still-pending", "visibility", "post-failure", "wrong-id", "collision", "authentication", "capability", "network", "destination-authentication", "destination-api"]:
+for mode in ["personal", "organization", "accepted-unverified", "accepted-still-pending", "visibility", "post-failure", "wrong-id", "collision", "authentication", "capability", "network", "destination-authentication", "destination-api", "wrong-login", "wrong-source", "wrong-repository", "wrong-destination", "organization-membership"]:
     base ∈ str ← output + "/" + mode
     Path(base).mkdir()
     executed_artifact ∈ str ← base + "/" + filename
@@ -64,30 +82,54 @@ for mode in ["personal", "organization", "accepted-unverified", "accepted-still-
     with open(base + "/server.stderr.bin", "xb") as error:
         server ∈ object ← subprocess.Popen(server_command, env=control_environment, stderr=error, start_new_session=True)
         codes ∈ list[int] ← []
+        wrapper_codes ∈ list[int] ← []
         runs ∈ list[dict[str, int]] ← []
         try:
             executions ∈ int ← 2 if mode == "personal" or mode == "organization" or mode == "accepted-unverified" or mode == "accepted-still-pending" else 1
+            retained_home ∈ str ← base + '/fresh home "'
+            Path(retained_home).mkdir()
             for index in range(executions):
                 observation_path ∈ Path ← Path(base + "/observations.json")
                 observed ∈ dict[str, object] ← json.loads(observation_path.read_bytes()) if observation_path.exists() else {"events": []}
                 event_begin ∈ int ← len(observed["events"])
                 work ← base + "/unrelated cwd '" + str(index)
-                home ∈ str ← base + '/fresh home "' + str(index)
+                home ∈ str ← retained_home if presentation == "paste" else base + '/fresh home "' + str(index)
                 Path(work).mkdir()
-                Path(home).mkdir()
+                if not Path(home).exists():
+                    Path(home).mkdir()
                 child_environment ∈ dict[str, str] ← dict(environment)
                 child_environment["HOME"] ← home
                 child_environment["FP_FIXTURE_IO"] ← base
                 child_environment["GH_TOKEN"] ← "disposable-fixture-token"
                 child_environment["GITHUB_TOKEN"] ← "disposable-fixture-token"
                 child_environment["GH_HOST"] ← "invalid.fixture"
-                child ← subprocess.run([launcher, workspace + "/kitchen/tests/transfer-parent.grease", launcher, executed_artifact], cwd=work, env=child_environment, capture_output=True, timeout=10)
+                command ∈ list[str] ← [launcher, workspace + "/kitchen/tests/transfer-parent.grease", launcher, executed_artifact]
+                if presentation == "paste":
+                    session_text ∈ str ← 'var before_here = $(pwd)\nvar before_home = ENV.HOME\nvar before_token = ENV.GH_TOKEN\nvar parent_marker = "unchanged"\n' + artifact_text + '\nif ($(pwd) !== before_here or ENV.HOME !== before_home or ENV.GH_TOKEN !== before_token or parent_marker !== "unchanged") { echo "PARENT_STATE_CHANGED" >&2; exit 9 }\necho "PARENT_SURVIVED"\n'
+                    command ← [launcher, "-c", session_text, "fresh-transfer-terminal"]
+                    if parent_kind == "bash":
+                        session_text ← 'set -e\nbefore_here=$PWD\nbefore_home=$HOME\nbefore_token=$GH_TOKEN\nparent_marker=unchanged\n' + artifact_text + '\nif [ "$PWD" != "$before_here" ] || [ "$HOME" != "$before_home" ] || [ "$GH_TOKEN" != "$before_token" ] || [ "$parent_marker" != unchanged ]; then echo PARENT_STATE_CHANGED >&2; exit 9; fi\necho PARENT_SURVIVED\n'
+                        command ← ["/bin/bash", "--noprofile", "--norc", "-c", session_text, "fresh-transfer-terminal"]
+                child ← subprocess.run(command, cwd=work, env=child_environment, capture_output=True, timeout=10)
                 Path(base + "/stdout-" + str(index) + ".bin").write_bytes(child.stdout)
                 Path(base + "/stderr-" + str(index) + ".bin").write_bytes(child.stderr)
                 parent_output ∈ bytes ← child.stdout
                 if not parent_output.endswith(b"PARENT_SURVIVED\n"):
                     raise ValueError("parent shell did not survive")
                 code ← child.returncode
+                wrapper_exit ∈ int ← code
+                wrapper_codes.append(wrapper_exit)
+                if presentation == "paste":
+                    markers ∈ list[str] ← []
+                    output_lines ∈ list[str] ← child.stdout.decode().splitlines()
+                    for line in output_lines:
+                        if line.startswith("KITCHEN_TRANSFER_CHILD_EXIT:"):
+                            markers.append(line[28:])
+                    if len(markers) != 1 or code != 0:
+                        raise ValueError("PASTE_CHILD_STATUS")
+                    code ← int(markers[0])
+                    if (code == 0) != (b"OWNERSHIP_TRANSFER_VERIFIED\n" in child.stdout):
+                        raise ValueError("PASTE_OUTCOME_MISMATCH")
                 codes.append(code)
                 observed ← json.loads(observation_path.read_bytes())
                 event_end ∈ int ← len(observed["events"])
@@ -96,6 +138,7 @@ for mode in ["personal", "organization", "accepted-unverified", "accepted-still-
                 codes.append(-125)
             execution ∈ str ← base + "/execution.json"
             Path(execution).write_text(json.dumps({"first_exit": codes[0], "second_exit": codes[1], "runs": runs}))
+            Path(base + "/wrapper-execution.json").write_text(json.dumps({"presentation": presentation, "wrapper_exits": wrapper_codes}))
             validator ∈ list[str] ← list(ithon)
             validator.extend([workspace + "/ai-ci/validators/kitchen-transfer-script.pi", specification, base + "/observations.json", execution, artifact, base + "/decision.json"])
             child ← subprocess.run(validator, env=control_environment, capture_output=True, timeout=10)
@@ -111,5 +154,68 @@ for mode in ["personal", "organization", "accepted-unverified", "accepted-still-
             except ProcessLookupError:
                 pass
             server.wait()
-Path(output + "/result.json").write_text(json.dumps({"status": "PASS", "scope": "local-artifact-diagnostic", "excluded_claims": ["worker-isolation", "trusted-execution", "deployment", "live-transfer"], "inputs": inputs, "artifact_sha256": digest, "generator_sha256": hashlib.sha256(Path(task + "/generate-transfer-github-repository-script.sh").read_bytes()).hexdigest(), "candidate_sha256": hashlib.sha256(Path(task + "/10.grease").read_bytes()).hexdigest(), "recipe_sha256": hashlib.sha256(Path(task + "/transfer-github-repository.grease").read_bytes()).hexdigest(), "launcher_sha256": hashlib.sha256(Path(launcher).read_bytes()).hexdigest(), "fixtures": decisions}, sort_keys=True))
+acquisition_decisions ∈ list[dict[str, object]] ← []
+if presentation == "paste":
+    for acquisition_mode in ["partial", "changed", "unavailable", "changed-cache", "missing-curl", "symbolic-state"]:
+        base ← output + "/acquisition-" + acquisition_mode
+        Path(base).mkdir()
+        home ← base + '/fresh home "'
+        work ← base + "/unrelated cwd '"
+        Path(home).mkdir()
+        Path(work).mkdir()
+        os.mkfifo(base + "/request")
+        os.mkfifo(base + "/response")
+        specification ← base + "/fixture.json"
+        Path(specification).write_text(json.dumps({"inputs": inputs, "mode": "personal", "artifact_sha256": digest}))
+        empty_events ∈ list[object] ← []
+        Path(base + "/observations.json").write_text(json.dumps({"events": empty_events, "mutations": 0}))
+        child_environment ← dict(environment)
+        child_environment["HOME"] ← home
+        child_environment["FP_FIXTURE_IO"] ← base
+        child_environment["FP_ACQUISITION_MODE"] ← acquisition_mode if acquisition_mode == "partial" or acquisition_mode == "changed" or acquisition_mode == "unavailable" else "valid"
+        child_environment["GH_TOKEN"] ← "disposable-fixture-token"
+        state ∈ str ← home + "/.local/state/kitchen/github-transfers"
+        if acquisition_mode == "changed-cache":
+            Path(state).mkdir(parents=True)
+            recipe_bytes ∈ bytes ← Path(task + "/transfer-github-repository.grease").read_bytes()
+            Path(state + "/transfer-github-repository-cf85b1dc4cae.grease").write_bytes(recipe_bytes + b"\n# changed cached program\n")
+        elif acquisition_mode == "missing-curl":
+            Path(base + "/empty-path").mkdir()
+            child_environment["PATH"] ← base + "/empty-path"
+        elif acquisition_mode == "symbolic-state":
+            Path(home + "/.local/state/kitchen").mkdir(parents=True)
+            Path(state).symlink_to(base)
+        server_command ← list(ithon)
+        server_command.extend([task + "/fixture-api.pi", base, specification])
+        with open(base + "/server.stderr.bin", "xb") as error:
+            server ← subprocess.Popen(server_command, env=control_environment, stderr=error, start_new_session=True)
+            try:
+                session_text ← 'var before_here = $(pwd)\nvar before_home = ENV.HOME\n' + artifact_text + '\nif ($(pwd) !== before_here or ENV.HOME !== before_home) { exit 9 }\necho "PARENT_SURVIVED"\n'
+                command ← [launcher, "-c", session_text, "fresh-transfer-terminal"]
+                if parent_kind == "bash":
+                    session_text ← 'set -e\nbefore_here=$PWD\nbefore_home=$HOME\n' + artifact_text + '\nif [ "$PWD" != "$before_here" ] || [ "$HOME" != "$before_home" ]; then exit 9; fi\necho PARENT_SURVIVED\n'
+                    command ← ["/bin/bash", "--noprofile", "--norc", "-c", session_text, "fresh-transfer-terminal"]
+                child ← subprocess.run(command, cwd=work, env=child_environment, capture_output=True, timeout=10)
+                Path(base + "/stdout.bin").write_bytes(child.stdout)
+                Path(base + "/stderr.bin").write_bytes(child.stderr)
+                observed ← json.loads(Path(base + "/observations.json").read_bytes())
+                observed_events ∈ list[object] ← list(observed["events"])
+                parent_code ∈ int ← child.returncode
+                mutations ∈ int ← int(observed["mutations"])
+                standard_output ∈ bytes ← child.stdout
+                standard_error ∈ bytes ← child.stderr
+                child_exit_count ∈ int ← standard_output.count(b"KITCHEN_TRANSFER_CHILD_EXIT:2\n")
+                refused_count ∈ int ← standard_error.count(b"OWNERSHIP_TRANSFER_NOT_VERIFIED;")
+                verified_count ∈ int ← standard_output.count(b"OWNERSHIP_TRANSFER_VERIFIED\n")
+                if parent_code != 0 or len(observed_events) != 0 or mutations != 0 or not standard_output.endswith(b"PARENT_SURVIVED\n") or child_exit_count != 1 or refused_count != 1 or verified_count != 0:
+                    raise ValueError("ACQUISITION_NEGATIVE_ACCEPTED: " + acquisition_mode)
+                acquisition_decisions.append({"case": acquisition_mode, "status": "PASS", "api_attempts": 0, "transfer_requests": 0, "inner_exit": 2, "parent_exit": child.returncode})
+            finally:
+                try:
+                    os.killpg(server.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                server.wait()
+Path(output + "/acquisition-decisions.json").write_text(json.dumps(acquisition_decisions, sort_keys=True))
+Path(output + "/result.json").write_text(json.dumps({"status": "PASS", "scope": "local-artifact-diagnostic", "presentation": presentation, "parent_context": parent_kind, "excluded_claims": ["worker-isolation", "trusted-execution", "deployment", "live-transfer"], "inputs": inputs, "artifact_sha256": digest, "generator_sha256": hashlib.sha256(Path(task + "/generate-transfer-github-repository-script.sh").read_bytes()).hexdigest(), "candidate_sha256": hashlib.sha256(Path(task + "/10.grease").read_bytes()).hexdigest(), "recipe_sha256": hashlib.sha256(Path(task + "/transfer-github-repository.grease").read_bytes()).hexdigest(), "launcher_sha256": hashlib.sha256(Path(launcher).read_bytes()).hexdigest(), "fixtures": decisions}, sort_keys=True))
 print("local artifact diagnostic passed")

@@ -65,12 +65,15 @@ while True:
                 if mode == "visibility":
                     visibility ← "public"
         elif endpoint == "user":
-            body ← {"login": inputs["expected_login"]}
+            authenticated_login ∈ str ← "unrelated-login" if mode == "wrong-login" else str(inputs["expected_login"])
+            body ← {"login": authenticated_login}
         elif endpoint == "users/" + str(inputs["destination_owner"]):
-            kind ∈ str ← "Organization" if mode == "organization" else "User"
-            body ← {"login": inputs["destination_owner"], "type": kind}
+            kind ∈ str ← "Organization" if mode == "organization" or mode == "organization-membership" else "User"
+            observed_destination ∈ str ← "unrelated-destination" if mode == "wrong-destination" else str(inputs["destination_owner"])
+            body ← {"login": observed_destination, "type": kind}
         elif endpoint == "user/memberships/orgs/" + str(inputs["destination_owner"]):
-            body ← {"state": "active", "role": "admin"}
+            membership_state ∈ str ← "pending" if mode == "organization-membership" else "active"
+            body ← {"state": membership_state, "role": "admin"}
         elif endpoint == "repositories/" + str(identity) or endpoint == "repos/" + source or endpoint == "repos/" + destination:
             if endpoint == "repositories/" + str(identity):
                 identity_reads ← identity_reads + 1
@@ -94,7 +97,12 @@ while True:
             else:
                 observed_id ∈ int ← identity + 1 if mode == "wrong-id" else identity
                 capable ∈ bool ← mode != "capability"
-                body ← {"id": observed_id, "full_name": owner, "visibility": visibility, "permissions": {"admin": capable}}
+                observed_name ∈ str ← owner
+                if mode == "wrong-source":
+                    observed_name ← "unrelated-source/" + str(inputs["repository"])
+                elif mode == "wrong-repository":
+                    observed_name ← str(inputs["source_owner"]) + "/unrelated-repository"
+                body ← {"id": observed_id, "full_name": observed_name, "visibility": visibility, "permissions": {"admin": capable}}
         else:
             code ← 1
             http_status ← 404

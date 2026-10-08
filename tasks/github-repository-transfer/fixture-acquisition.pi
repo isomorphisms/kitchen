@@ -1,0 +1,34 @@
+"""Disposable recipe acquisition, with independently recorded exact URL/bytes."""
+import os
+import sys
+import json
+import hashlib
+from pathlib import Path
+from builtins import list, dict, ValueError
+
+argv ∈ list[str] ← sys.argv
+recipe ∈ str ← argv[1]
+environment ∈ dict[str, str] ← os.environ
+root ∈ str ← environment["FP_FIXTURE_IO"]
+mode ∈ str ← environment.get("FP_ACQUISITION_MODE", "valid")
+arguments ∈ list[str] ← argv[2:]
+expected_prefix ∈ list[str] ← ["--proto", "=https", "--proto-redir", "=https", "--tlsv1.2", "--fail", "--silent", "--show-error", "--location", "--output"]
+expected_url ∈ str ← "https://raw.githubusercontent.com/isomorphisms/kitchen/322b4ff634ee745748b209f19e63c472d01e0ae9/tasks/github-repository-transfer/transfer-github-repository.grease"
+if len(arguments) != 12 or arguments[:10] != expected_prefix or arguments[11] != expected_url:
+    raise ValueError("UNQUALIFIED_ACQUISITION")
+payload ∈ bytes ← Path(recipe).read_bytes()
+code ∈ int ← 0
+if mode == "partial":
+    payload ← payload[:300]
+    code ← 22
+elif mode == "changed":
+    payload ← payload + b"\n# altered recipe bytes\n"
+elif mode == "unavailable":
+    payload ← b""
+    code ← 6
+elif mode != "valid":
+    raise ValueError("UNKNOWN_ACQUISITION_FIXTURE")
+Path(arguments[10]).write_bytes(payload)
+record ∈ str ← environment.get("FP_ACQUISITION_RECORD", root + "/acquisition.json")
+Path(record).write_text(json.dumps({"argv": arguments, "mode": mode, "exit": code, "sha256": hashlib.sha256(payload).hexdigest()}, sort_keys=True))
+sys.exit(code)

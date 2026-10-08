@@ -1,4 +1,4 @@
-name: GitHub repository transfer regression
+name: Historical POSIX transfer regression
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
@@ -10,7 +10,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - name: Run generated transfer-script regression
+      - name: Run historical POSIX generator regression (not qualified acceptance)
         run: |
           git rev-parse HEAD
           sh tests/github-repository-transfer.sh
