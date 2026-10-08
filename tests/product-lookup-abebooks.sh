@@ -29,6 +29,21 @@ if sh "$candidate" >/dev/null 2>&1; then
     fail "missing ISBN was accepted"
 fi
 
+# A well-shaped ISBN with a bad check digit must fail rather than become a URL.
+if sh "$candidate" 9780312625437 >/dev/null 2>&1; then
+    fail "invalid ISBN-13 check digit was accepted"
+fi
+if sh "$candidate" 0312625430 >/dev/null 2>&1; then
+    fail "invalid ISBN-10 check digit was accepted"
+fi
+
+isbn10_lower=$(sh "$candidate" 031262543x)
+[ "$isbn10_lower" = "$isbn10" ] || fail "lowercase ISBN-10 X did not canonicalize"
+
+if sh "$candidate" 9780312625436 ignored-extra-argument >/dev/null 2>&1; then
+    fail "extra positional arguments were accepted"
+fi
+
 if sh "$candidate" '9780312625436;touch /tmp/nope' >/dev/null 2>&1; then
     fail "shell metacharacters were accepted"
 fi
