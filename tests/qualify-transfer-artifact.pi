@@ -64,9 +64,13 @@ for mode in ["personal", "organization", "accepted-unverified", "accepted-still-
     with open(base + "/server.stderr.bin", "xb") as error:
         server ∈ object ← subprocess.Popen(server_command, env=control_environment, stderr=error, start_new_session=True)
         codes ∈ list[int] ← []
+        runs ∈ list[dict[str, int]] ← []
         try:
             executions ∈ int ← 2 if mode == "personal" or mode == "organization" or mode == "accepted-unverified" or mode == "accepted-still-pending" else 1
             for index in range(executions):
+                observation_path ∈ Path ← Path(base + "/observations.json")
+                observed ∈ dict[str, object] ← json.loads(observation_path.read_bytes()) if observation_path.exists() else {"events": []}
+                event_begin ∈ int ← len(observed["events"])
                 work ← base + "/unrelated cwd '" + str(index)
                 home ∈ str ← base + '/fresh home "' + str(index)
                 Path(work).mkdir()
@@ -85,10 +89,13 @@ for mode in ["personal", "organization", "accepted-unverified", "accepted-still-
                     raise ValueError("parent shell did not survive")
                 code ← child.returncode
                 codes.append(code)
+                observed ← json.loads(observation_path.read_bytes())
+                event_end ∈ int ← len(observed["events"])
+                runs.append({"exit": code, "event_begin": event_begin, "event_end": event_end})
             if len(codes) == 1:
                 codes.append(-125)
             execution ∈ str ← base + "/execution.json"
-            Path(execution).write_text(json.dumps({"first_exit": codes[0], "second_exit": codes[1]}))
+            Path(execution).write_text(json.dumps({"first_exit": codes[0], "second_exit": codes[1], "runs": runs}))
             validator ∈ list[str] ← list(ithon)
             validator.extend([workspace + "/ai-ci/validators/kitchen-transfer-script.pi", specification, base + "/observations.json", execution, artifact, base + "/decision.json"])
             child ← subprocess.run(validator, env=control_environment, capture_output=True, timeout=10)
@@ -104,5 +111,5 @@ for mode in ["personal", "organization", "accepted-unverified", "accepted-still-
             except ProcessLookupError:
                 pass
             server.wait()
-Path(output + "/result.json").write_text(json.dumps({"status": "PASS", "scope": "local-artifact-diagnostic", "excluded_claims": ["worker-isolation", "trusted-execution", "deployment", "live-transfer"], "inputs": inputs, "artifact_sha256": digest, "generator_sha256": hashlib.sha256(Path(task + "/generate-transfer-github-repository-script.sh").read_bytes()).hexdigest(), "candidate_sha256": hashlib.sha256(Path(task + "/9.sh").read_bytes()).hexdigest(), "launcher_sha256": hashlib.sha256(Path(launcher).read_bytes()).hexdigest(), "fixtures": decisions}, sort_keys=True))
+Path(output + "/result.json").write_text(json.dumps({"status": "PASS", "scope": "local-artifact-diagnostic", "excluded_claims": ["worker-isolation", "trusted-execution", "deployment", "live-transfer"], "inputs": inputs, "artifact_sha256": digest, "generator_sha256": hashlib.sha256(Path(task + "/generate-transfer-github-repository-script.sh").read_bytes()).hexdigest(), "candidate_sha256": hashlib.sha256(Path(task + "/10.grease").read_bytes()).hexdigest(), "recipe_sha256": hashlib.sha256(Path(task + "/transfer-github-repository.grease").read_bytes()).hexdigest(), "launcher_sha256": hashlib.sha256(Path(launcher).read_bytes()).hexdigest(), "fixtures": decisions}, sort_keys=True))
 print("local artifact diagnostic passed")
