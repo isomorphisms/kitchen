@@ -39,11 +39,13 @@ var output = "transfer-${repository}-from-${source_owner}-to-${destination_owner
     cat <<'PASTE'
 if /opt/catfood/bin/grease -c '
 proc blocked (...messages) { echo "Prerequisite unavailable; no transfer requested:" @messages >&2; echo "KITCHEN_TRANSFER_CHILD_EXIT:2"; exit 2 }
-for executable in curl sha256sum mktemp mkdir mv rm { if ! command -v "$executable" >/dev/null { blocked "$executable" } }
+for executable in curl sha256sum mktemp mkdir mv rm id stat { if ! command -v "$executable" >/dev/null { blocked "$executable" } }
 var state = "$[ENV.HOME]/.local/state/kitchen/github-transfers"
 umask 077
 if test -L "$state" { blocked "Transfer state is a symbolic link" }
 mkdir -p -m 700 -- "$state"
+var state_owner = $(id -u)
+if ($(stat -c "%u:%a" -- "$state") !== "${state_owner}:700") { blocked "Transfer state must be private and owned by this user" }
 var program = "$state/transfer-github-repository-cf85b1dc4cae.grease"
 if ! test -f "$program" {
   var download = $(mktemp -- "$state/acquisition.XXXXXX")

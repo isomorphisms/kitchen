@@ -156,7 +156,7 @@ for mode in ["personal", "organization", "accepted-unverified", "accepted-still-
             server.wait()
 acquisition_decisions ∈ list[dict[str, object]] ← []
 if presentation == "paste":
-    for acquisition_mode in ["partial", "changed", "unavailable", "changed-cache", "missing-curl", "symbolic-state"]:
+    for acquisition_mode in ["partial", "changed", "unavailable", "changed-cache", "missing-curl", "symbolic-state", "world-writable-state"]:
         base ← output + "/acquisition-" + acquisition_mode
         Path(base).mkdir()
         home ← base + '/fresh home "'
@@ -176,7 +176,7 @@ if presentation == "paste":
         child_environment["GH_TOKEN"] ← "disposable-fixture-token"
         state ∈ str ← home + "/.local/state/kitchen/github-transfers"
         if acquisition_mode == "changed-cache":
-            Path(state).mkdir(parents=True)
+            Path(state).mkdir(mode=448, parents=True)
             recipe_bytes ∈ bytes ← Path(task + "/transfer-github-repository.grease").read_bytes()
             Path(state + "/transfer-github-repository-cf85b1dc4cae.grease").write_bytes(recipe_bytes + b"\n# changed cached program\n")
         elif acquisition_mode == "missing-curl":
@@ -185,6 +185,9 @@ if presentation == "paste":
         elif acquisition_mode == "symbolic-state":
             Path(home + "/.local/state/kitchen").mkdir(parents=True)
             Path(state).symlink_to(base)
+        elif acquisition_mode == "world-writable-state":
+            Path(state).mkdir(parents=True)
+            os.chmod(state, 511)
         server_command ← list(ithon)
         server_command.extend([task + "/fixture-api.pi", base, specification])
         with open(base + "/server.stderr.bin", "xb") as error:

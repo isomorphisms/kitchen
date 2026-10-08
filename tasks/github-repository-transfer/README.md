@@ -28,7 +28,9 @@ program with named parameters. It acquires only the immutable Kitchen program at
 before execution, including cached bytes. Its durable program and pending ledger
 live under the user's home `.local/state/kitchen/github-transfers`, so changing
 the working directory cannot cause a blind resend. Changing homes changes that
-durable input state. Curl and coreutils are explicit additional prerequisites.
+durable input state. The directory must have executing-user ownership and mode
+0700; shared existing state is refused before acquisition or any API call.
+Curl and coreutils are explicit additional prerequisites.
 
 The compact unit protects the parent session after child failure and emits an
 explicit unverified outcome. `KITCHEN_TRANSFER_CHILD_EXIT` records the actual
@@ -75,7 +77,8 @@ inside fresh Grease sessions, or `paste bash` for fresh Bash parents. Those mode
 require the checked launcher at the
 qualified `/opt/catfood/bin/grease` path, checks parent cwd/home/token state,
 retain each child's independent API event range, and reject partial/unavailable
-acquisition, changed source/cache bytes, missing curl and a symbolic state path.
+acquisition, changed source/cache bytes, missing curl, a symbolic state path and
+an existing world-writable state directory.
 The fixture acquisition record is diagnostic only; it does not grant acceptance.
 The API corpus retains the thirteen original scenarios and adds wrong login,
 source, repository, destination and inactive organization membership: eighteen

@@ -26,6 +26,10 @@ download, changed bytes and missing tools must make zero transfer requests.
 The normal state belongs to the authenticated user's home directory, under
 `.local/state/kitchen/github-transfers`. Changing homes is changing durable input
 state; qualification does not claim to reconstruct a lost pending ledger. Each
+state directory must be owned by the executing user with mode 0700. Existing
+shared/writeable state must be rejected before acquisition or any API call;
+`mkdir -p -m 700` alone is not evidence about an existing directory.
+Each
 positive or negative fixture uses a fresh home. Reruns use that same home and a
 different fresh terminal/directory. Already-moved identity must require no POST.
 

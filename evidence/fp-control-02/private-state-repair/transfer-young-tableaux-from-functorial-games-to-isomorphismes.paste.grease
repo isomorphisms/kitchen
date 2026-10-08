@@ -1,0 +1,27 @@
+# GitHub ownership transfer: functorial-games/young-tableaux -> isomorphismes/young-tableaux; execution requires your authorization.
+if /opt/catfood/bin/grease -c '
+proc blocked (...messages) { echo "Prerequisite unavailable; no transfer requested:" @messages >&2; echo "KITCHEN_TRANSFER_CHILD_EXIT:2"; exit 2 }
+for executable in curl sha256sum mktemp mkdir mv rm id stat { if ! command -v "$executable" >/dev/null { blocked "$executable" } }
+var state = "$[ENV.HOME]/.local/state/kitchen/github-transfers"
+umask 077
+if test -L "$state" { blocked "Transfer state is a symbolic link" }
+mkdir -p -m 700 -- "$state"
+var state_owner = $(id -u)
+if ($(stat -c "%u:%a" -- "$state") !== "${state_owner}:700") { blocked "Transfer state must be private and owned by this user" }
+var program = "$state/transfer-github-repository-cf85b1dc4cae.grease"
+if ! test -f "$program" {
+  var download = $(mktemp -- "$state/acquisition.XXXXXX")
+  if ! curl --proto "=https" --proto-redir "=https" --tlsv1.2 --fail --silent --show-error --location --output "$download" "https://raw.githubusercontent.com/isomorphisms/kitchen/322b4ff634ee745748b209f19e63c472d01e0ae9/tasks/github-repository-transfer/transfer-github-repository.grease" { rm -- "$download"; blocked "Recipe acquisition failed" }
+  if ! sha256sum --check --status <<< "cf85b1dc4caea07749d5070bbc143d669e687820598c36a0050fddccb2612dc6  $download" { rm -- "$download"; blocked "Recipe bytes failed verification" }
+  mv -- "$download" "$program"
+}
+if ! sha256sum --check --status <<< "cf85b1dc4caea07749d5070bbc143d669e687820598c36a0050fddccb2612dc6  $program" { blocked "Recipe bytes changed" }
+try { /opt/catfood/bin/grease "$program" @ARGV }
+var child_status = _error.code
+printf "KITCHEN_TRANSFER_CHILD_EXIT:%s\\n" "$child_status"
+exit "$child_status"
+' transfer-github-repository --source-owner functorial-games --repository young-tableaux --destination-owner isomorphismes --expected-login isomorphisms --repository-id 1405872600 --context linux-x86_64-grease-v1; then
+  if test -t 1; then printf '\033[32mOWNERSHIP_TRANSFER_VERIFIED\033[0m\n'; else echo 'OWNERSHIP_TRANSFER_VERIFIED'; fi
+else
+  if test -t 2; then printf '\033[31mOWNERSHIP_TRANSFER_NOT_VERIFIED; retain transfer state before retry\033[0m\n' >&2; else echo 'OWNERSHIP_TRANSFER_NOT_VERIFIED; retain transfer state before retry' >&2; fi
+fi
