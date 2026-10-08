@@ -48,17 +48,21 @@ jobs:
         env:
           ITHON_CHECK_RECEIPT: /tmp/kitchen-ithon-checks.jsonl
         run: |
+          mkdir -p /tmp/kitchen-attempt
+          printf 'state\tPENDING\nscope\tlocal-artifact-diagnostic\n' > /tmp/kitchen-attempt/status.tsv
           sudo mkdir -p /opt/catfood/bin
           sudo ln -s '${{ github.workspace }}/runtime/.build/grease/bin/grease' /opt/catfood/bin/grease
-          /usr/bin/python3 ithon/ithon_host.py kitchen/tests/qualify-transfer-artifact.pi '${{ github.workspace }}' /tmp/kitchen-standalone '${{ github.workspace }}/runtime/.build/grease/bin/grease' '${{ github.workspace }}/runtime/grease/source' '${{ github.workspace }}/kitchen/evidence/fp-control-02/young-tableaux-inputs.json'
-          /usr/bin/python3 ithon/ithon_host.py kitchen/tests/qualify-transfer-artifact.pi '${{ github.workspace }}' /tmp/kitchen-paste '${{ github.workspace }}/runtime/.build/grease/bin/grease' '${{ github.workspace }}/runtime/grease/source' '${{ github.workspace }}/kitchen/evidence/fp-control-02/young-tableaux-inputs.json' paste
-          /usr/bin/python3 ithon/ithon_host.py kitchen/tests/qualify-transfer-artifact.pi '${{ github.workspace }}' /tmp/kitchen-bash-parent '${{ github.workspace }}/runtime/.build/grease/bin/grease' '${{ github.workspace }}/runtime/grease/source' '${{ github.workspace }}/kitchen/evidence/fp-control-02/young-tableaux-inputs.json' paste bash
+          /usr/bin/env -u PYTHONPATH -u PYTHONHOME /usr/bin/python3 ithon/ithon_host.py kitchen/tests/qualify-transfer-artifact.pi '${{ github.workspace }}' /tmp/kitchen-standalone '${{ github.workspace }}/runtime/.build/grease/bin/grease' '${{ github.workspace }}/runtime/grease/source' '${{ github.workspace }}/kitchen/evidence/fp-control-02/young-tableaux-inputs.json'
+          /usr/bin/env -u PYTHONPATH -u PYTHONHOME /usr/bin/python3 ithon/ithon_host.py kitchen/tests/qualify-transfer-artifact.pi '${{ github.workspace }}' /tmp/kitchen-paste '${{ github.workspace }}/runtime/.build/grease/bin/grease' '${{ github.workspace }}/runtime/grease/source' '${{ github.workspace }}/kitchen/evidence/fp-control-02/young-tableaux-inputs.json' paste
+          /usr/bin/env -u PYTHONPATH -u PYTHONHOME /usr/bin/python3 ithon/ithon_host.py kitchen/tests/qualify-transfer-artifact.pi '${{ github.workspace }}' /tmp/kitchen-bash-parent '${{ github.workspace }}/runtime/.build/grease/bin/grease' '${{ github.workspace }}/runtime/grease/source' '${{ github.workspace }}/kitchen/evidence/fp-control-02/young-tableaux-inputs.json' paste bash
+          printf 'state\tPASS\nscope\tlocal-artifact-diagnostic\n' > /tmp/kitchen-attempt/status.tsv
       - name: Preserve partial, failed and verified fixture state
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: kitchen-handoff-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
+            /tmp/kitchen-attempt
             /tmp/kitchen-standalone
             /tmp/kitchen-paste
             /tmp/kitchen-bash-parent
