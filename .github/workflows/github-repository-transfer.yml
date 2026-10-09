@@ -14,3 +14,5 @@ jobs:
         run: |
           git rev-parse HEAD
           sh tests/github-repository-transfer.sh
+      - name: Run Grease transfer generation and identity regression (portable test dialect)
+        run: sh tests/github-repository-transfer-grease.sh
