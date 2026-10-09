@@ -1,0 +1,33 @@
+#!/usr/bin/env grease
+set -eu
+umask 077
+ib=${STORAGE_IB_ROOT:?explicit IB checkout required}
+revision=${STORAGE_IB_REVISION:?expected exact IB commit required}
+runner=${GREASE:?verified Grease runtime required}
+output=${STORAGE_RECEIPT_DIR:?explicit unused receipt directory required}
+fail() { printf 'storage source qualification: %s\n' "$*" >&2; exit 2; }
+for path in "$ib" "$runner" "$output"; do
+ case $path in /*) ;; *) fail 'paths must be absolute' ;; esac
+done
+origin=$(git -C "$ib" remote get-url origin)
+case $origin in https://github.com/isomorphisms/ib.git|https://github.com/isomorphisms/ib) ;; *) fail 'unexpected IB origin' ;; esac
+test "$(git -C "$ib" rev-parse HEAD)" = "$revision" || fail 'IB revision mismatch'
+for file in bin/ib-source.grease bin/retain-source.grease bin/project-raw-urls.grease lib/ib/pensieve.grease lib/ib/chatgpt-source.jq tests/retained-source.grease; do
+ expected=$(git -C "$ib" rev-parse "$revision:$file")
+ actual=$(git -C "$ib" hash-object "$ib/$file")
+ test "$expected" = "$actual" || fail 'IB implementation/test bytes differ from the expected commit'
+done
+test ! -e "$output" && test ! -L "$output" || fail 'receipt directory already exists'
+mkdir -p -- "$output"
+if "$runner" "$ib/tests/retained-source.grease" > "$output/stdout.txt" 2> "$output/stderr.txt"; then
+ grep -Fx 'PASS Grease retained-source, graph/reference, history, rebuild and refusal fixtures; live source NOT_RUN' "$output/stdout.txt" >/dev/null || fail 'fixture returned zero without semantic completion'
+else
+ fail 'retained-source fixture failed; inspect the private output streams'
+fi
+{
+ printf 'schema\tstorage-source-fixture-v1\nresult\tPASS\nscope\thost-fixture\n'
+ printf 'ib_revision\t%s\nib_tree\t%s\nruntime_sha256\t%s\n' "$revision" "$(git -C "$ib" rev-parse HEAD^{tree})" "$(sha256sum "$runner" | cut -d ' ' -f 1)"
+ printf 'stdout_sha256\t%s\nstderr_sha256\t%s\n' "$(sha256sum "$output/stdout.txt" | cut -d ' ' -f 1)" "$(sha256sum "$output/stderr.txt" | cut -d ' ' -f 1)"
+ printf 'live\tNOT_RUN\nphysical\tNOT_RUN\n'
+} > "$output/receipt.tsv"
+printf 'PASS storage source host qualification\n'
