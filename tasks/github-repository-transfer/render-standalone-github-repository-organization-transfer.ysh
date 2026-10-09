@@ -16,7 +16,7 @@ done
 
 parent=$(dirname "$0")
 here=$(CDPATH= cd "$parent" && pwd)
-candidate=$here/4.ysh
+candidate=$here/5.ysh
 test -r "$candidate" || fail "missing versioned Grease transfer candidate: $candidate"
 
 printf '#!/usr/bin/env grease\n'
