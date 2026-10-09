@@ -1,0 +1,23 @@
+name: AbeBooks ISBN helper acceptance
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  isbn:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify POSIX script and URL/check-digit fixtures
+        run: |
+          sh -n tasks/product-lookup/abebooks-lowest-used-isbn.sh
+          sh -n tests/product-lookup-abebooks.sh
+          sh tests/product-lookup-abebooks.sh
