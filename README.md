@@ -1,3 +1,10 @@
+# How to move a user's GitHub repository to a different organization
+
+See [the Grease-first canonical Kitchen procedure](tasks/github-repository-transfer/HOW-TO-MOVE-A-GITHUB-REPOSITORY-TO-ANOTHER-ORGANIZATION.md).
+The checked program generator emits an entire standalone Grease program. Flexible Pipes runs it and verifies the repository identity before responding.
+
+---
+
 # Kitchen
 
 Kitchen is where terminal instructions are prepared before they are served.

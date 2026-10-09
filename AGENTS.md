@@ -87,10 +87,13 @@ generator for a descriptive standalone script, run that producer during
 preparation and hand the human the descriptive artifact rather than telling
 them to execute a numbered candidate.
 
-For GitHub ownership transfers, use
-`tasks/github-repository-transfer/generate-transfer-github-repository-script.sh`
-to produce a transfer-specific script. Do not serve
-`tasks/github-repository-transfer/1.sh` as the normal human command.
+For GitHub ownership transfers, use Grease-first
+`tasks/github-repository-transfer/render-standalone-github-repository-organization-transfer.ysh`
+to generate a complete, standalone Grease program. Prefer the named Flexible Pipes
+`how-to-move-the-users-github-repository-to-a-different-organization`
+entrypoint to generate, run, verify immutable repository identity, and render a
+truthful user-visible response. Do not serve the historical numbered `1.sh` or
+its POSIX generator as the normal human command.
 
 Once a numbered version has been tested, served, or otherwise become evidence,
 do not silently rewrite its history. Make the next numbered version for a
