@@ -1,0 +1,56 @@
+#!/bin/sh
+set -eu
+state=${TRANSFER_TEST_STATE:?}
+scenario=${TRANSFER_TEST_SCENARIO:-normal}
+case ${GH_HOST:-} in github.com) ;; *) echo 'wrong host' >&2; exit 93;; esac
+[ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ] || { echo 'tokens not cleared' >&2; exit 94; }
+case $1 in auth) [ "$scenario" != unauthenticated ]; exit $? ;; api) shift;; *) exit 98;; esac
+path= jq= method=GET
+while [ "$#" -gt 0 ]; do
+ case $1 in
+ --method) method=$2; shift 2;;
+ --jq) jq=$2; shift 2;;
+ -f) [ "$2" = new_owner=isomorphismes ] || exit 96; shift 2;;
+ --silent) shift;;
+ *) [ -n "$path" ] || path=$1; shift;;
+ esac
+done
+name=${path#repos/}; name=${name#*/}; name=${name%/transfer}
+case $name in mapping-class) id=1412391052;; montesinos) id=1412394512;; SymmHub) id=1412402847;; switch) id=1411661771;; *) id=123;; esac
+src=isomorphisms/$name
+dst=isomorphismes/$name
+if [ "$method" = POST ]; then
+ [ "$path" = repos/$src/transfer ] || exit 96
+ echo "$name" >> "$state/post.log"
+ [ "$scenario" != rejected ] || { echo 'HTTP 422 rejected' >&2; exit 1; }
+ touch "$state/$name.done"
+ exit 0
+fi
+case $path in
+ user) if [ "$scenario" = wrong-login ]; then echo other; else echo isomorphisms; fi;;
+ orgs/isomorphismes) echo isomorphismes;;
+ user/memberships/orgs/isomorphismes) if [ "$scenario" = not-member ]; then echo pending; else echo active; fi;;
+ repos/isomorphisms/*)
+  [ "$scenario" != source-error ] || { echo 'HTTP 403 denied' >&2; exit 1; }
+  case $jq in
+   .id) if [ "$scenario" = invalid-id ]; then echo null; else echo "$id"; fi;;
+   .full_name) if [ "$scenario" = unrelated-redirect ]; then echo unrelated/$name; elif [ "$scenario" = already ] || { [ -f "$state/$name.done" ] && [ "$scenario" != pending ]; }; then echo "$dst"; else echo "$src"; fi;;
+   .permissions.admin) if [ "$scenario" = no-admin ]; then echo false; else echo true; fi;;
+   *) exit 95;;
+  esac;;
+ repos/isomorphismes/*)
+  if [ "$scenario" = collision ] || [ "$scenario" = already ] || { [ -f "$state/$name.done" ] && [ "$scenario" != pending ]; }; then
+   case $jq in
+    .full_name) echo "$dst";;
+    .id)
+     if [ "$scenario" = collision ] || [ "$scenario" = wrong-id ]; then echo 999;
+     elif [ "$scenario" = independent-id ]; then
+      if [ -f "$state/first-id" ]; then echo 999; else touch "$state/first-id"; echo "$id"; fi
+     else echo "$id"; fi;;
+    *) exit 95;;
+   esac
+  else
+   echo 'HTTP 404 not found' >&2; exit 1
+  fi;;
+ *) echo "Unknown path: $path" >&2; exit 95;;
+esac
