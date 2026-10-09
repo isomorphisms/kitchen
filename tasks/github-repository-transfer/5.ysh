@@ -1,0 +1,137 @@
+#!/usr/bin/env grease
+# Kitchen transfer candidate 5. Classify gh 404 bodies with Grease-safe fixed-string checks.
+# Takes SOURCE_OWNER REPOSITORY DESTINATION_ORGANIZATION EXPECTED_GITHUB_LOGIN.
+set -eu
+
+fail() {
+    printf 'GitHub repository transfer: %s\n' "$*" >&2
+    exit 1
+}
+
+lower() {
+    printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+test "$#" -eq 4 || fail 'usage: transfer SOURCE_OWNER REPOSITORY DESTINATION_ORGANIZATION EXPECTED_GITHUB_LOGIN'
+source_owner=$1
+repository=$2
+destination_organization=$3
+expected_login=$4
+
+for component in "$source_owner" "$repository" "$destination_organization" "$expected_login"; do
+    case $component in
+        ''|[!A-Za-z0-9]*|*[!A-Za-z0-9_.-]*) fail "invalid GitHub name component: $component" ;;
+    esac
+done
+
+command -v gh >/dev/null 2>&1 || fail 'gh is not installed'
+setglobal ENV.GH_TOKEN = null
+setglobal ENV.GITHUB_TOKEN = null
+setglobal ENV.GH_HOST = 'github.com'
+gh auth status --hostname github.com >/dev/null 2>&1 || fail 'gh is not authenticated to github.com'
+try { login=$(gh api user --jq '.login') }
+if (_error.code !== 0) { fail 'cannot read authenticated GitHub login' }
+login_key=$(lower "$login")
+expected_login_key=$(lower "$expected_login")
+test "$login_key" = "$expected_login_key" || fail "authenticated as $login, expected $expected_login"
+
+requested_source=$source_owner/$repository
+try { source_full=$(gh api "repos/$requested_source" --jq '.full_name') }
+if (_error.code !== 0) { fail "cannot read source $requested_source" }
+try { source_id=$(gh api "repos/$requested_source" --jq '.id') }
+if (_error.code !== 0) { fail 'cannot read source repository ID' }
+case $source_id in
+    ''|*[!0-9]*) fail 'source repository ID is missing or invalid' ;;
+esac
+source_key=$(lower "$source_full")
+requested_source_key=$(lower "$requested_source")
+
+try { canonical_organization=$(gh api "orgs/$destination_organization" --jq '.login') }
+if (_error.code !== 0) { fail "cannot read destination organization $destination_organization" }
+organization_key=$(lower "$canonical_organization")
+requested_organization_key=$(lower "$destination_organization")
+test "$organization_key" = "$requested_organization_key" ||
+    fail "organization lookup resolved to $canonical_organization, expected $destination_organization"
+destination=$canonical_organization/$repository
+destination_key=$(lower "$destination")
+
+destination_full=''
+try { destination_full=$(gh api "repos/$destination" --jq '.full_name' 2>/dev/null) }
+if (_error.code !== 0) {
+    destination_error=$destination_full
+    destination_full=''
+    try { printf '%s\n' "$destination_error" | grep -F '"status":"404"' >/dev/null }
+    if (_error.code !== 0) { fail "cannot determine whether destination exists: $destination_error" }
+}
+destination_full_key=$(lower "$destination_full")
+
+# Idempotent reruns: an old repository URL redirects to the transferred repository.
+# Require identity by immutable repository ID, not merely a matching name.
+if test "$source_key" = "$destination_key"; then
+    test -n "$destination_full" && test "$destination_full_key" = "$destination_key" ||
+        fail "source redirects to $destination, but destination is not canonical and accessible"
+    try { destination_id=$(gh api "repos/$destination" --jq '.id') }
+    if (_error.code !== 0) { fail 'cannot read destination repository ID' }
+    test "$source_id" = "$destination_id" || fail 'source and destination repository IDs differ'
+    printf 'status=verified\naction=already_transferred\nrepository_id=%s\nrepository_url=https://github.com/%s\n' "$source_id" "$destination"
+    exit 0
+fi
+
+test "$source_key" = "$requested_source_key" ||
+    fail "requested source $requested_source redirects to unrelated $source_full"
+
+if test -n "$destination_full" && test "$destination_full_key" = "$destination_key"; then
+    fail "destination already exists: $destination_full"
+fi
+
+try { source_admin=$(gh api "repos/$requested_source" --jq '.permissions.admin') }
+if (_error.code !== 0) { fail 'cannot determine source administrator permission' }
+test "$source_admin" = true || fail "authenticated user lacks administrator access to $requested_source"
+
+try { membership=$(gh api "user/memberships/orgs/$canonical_organization" --jq '.state') }
+if (_error.code !== 0) { fail "cannot verify membership in $canonical_organization" }
+test "$membership" = active || fail "membership in $canonical_organization is $membership, not active"
+
+printf 'GitHub repository transfer: requesting %s -> %s (repository ID %s)\n' \
+    "$source_full" "$destination" "$source_id" >&2
+
+try {
+    gh api --method POST "repos/$requested_source/transfer" \
+        -f "new_owner=$canonical_organization" --silent
+}
+if (_error.code !== 0) { fail 'GitHub rejected transfer; see the retained stderr log' }
+
+var attempt = 0
+while (attempt < 30) {
+    destination_full=''
+    try { destination_full=$(gh api "repos/$destination" --jq '.full_name' 2>/dev/null) }
+    if (_error.code !== 0) {
+        destination_error=$destination_full
+        destination_full=''
+        try { printf '%s\n' "$destination_error" | grep -F '"status":"404"' >/dev/null }
+        if (_error.code !== 0) { fail "destination lookup failed while verifying transfer: $destination_error" }
+    }
+    destination_full_key=$(lower "$destination_full")
+    if test -n "$destination_full" && test "$destination_full_key" = "$destination_key"; then
+        destination_id=''
+        try { destination_id=$(gh api "repos/$destination" --jq '.id' 2>/dev/null) }
+        if (_error.code !== 0) {
+            destination_error=$destination_id
+            destination_id=''
+            try { printf '%s\n' "$destination_error" | grep -F '"status":"404"' >/dev/null }
+            if (_error.code !== 0) { fail "destination ID lookup failed while verifying transfer: $destination_error" }
+        }
+        if test "$destination_id" = "$source_id"; then
+            printf 'status=verified\naction=transferred\nrepository_id=%s\nrepository_url=https://github.com/%s\n' "$source_id" "$destination"
+            exit 0
+        fi
+        test -z "$destination_id" || fail "destination ID $destination_id differs from original ID $source_id"
+    fi
+    setvar attempt += 1
+    if (attempt < 30) { sleep 2 }
+}
+
+source_after=unavailable
+try { source_after=$(gh api "repos/$requested_source" --jq '.full_name' 2>/dev/null) }
+if (_error.code !== 0) { source_after=unavailable }
+fail "GitHub accepted the request but transfer is unverified; requested=$destination; source_now=$source_after"
