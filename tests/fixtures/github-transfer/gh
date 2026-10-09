@@ -50,7 +50,12 @@ case $path in
     *) exit 95;;
    esac
   else
-   echo 'HTTP 404 not found' >&2; exit 1
+   if [ "$scenario" = destination-error ]; then
+    echo '{"message":"Forbidden","documentation_url":"https://docs.github.com/rest/repos/repos#get-a-repository","status":"403"}'
+   else
+    echo '{"message":"Not Found","documentation_url":"https://docs.github.com/rest/repos/repos#get-a-repository","status":"404"}'
+   fi
+   exit 1
   fi;;
  *) echo "Unknown path: $path" >&2; exit 95;;
 esac
