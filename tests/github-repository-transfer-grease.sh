@@ -35,6 +35,13 @@ KITCHEN_ROOT=$root
 export GREASE_BINARY PATH KITCHEN_ROOT
 cd "$tmp"
 generator=$root/tasks/github-repository-transfer/render-standalone-github-repository-organization-transfer.ysh
+if grep -F 'test -r "$candidate"' "$generator" >/dev/null; then
+    echo 'Generator still relies on the C67-failing candidate test -r predicate' >&2
+    exit 1
+fi
+grep -F 'head -n 1 "$candidate" > "$candidate_probe"' "$generator" >/dev/null
+grep -F 'candidate_header=$(cat "$candidate_probe")' "$generator" >/dev/null
+grep -F "test \"\$candidate_header\" = '#!/usr/bin/env grease'" "$generator" >/dev/null
 if grease "$generator" 'bad;owner' mapping-class isomorphismes isomorphisms > "$tmp/bad" 2>/dev/null; then
     echo 'Invalid generator argument accepted' >&2; exit 1
 fi
