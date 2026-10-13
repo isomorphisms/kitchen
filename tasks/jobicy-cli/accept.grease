@@ -16,6 +16,7 @@ test "$(git -C "$kitchen_root" rev-parse HEAD)" = "$kitchen_head"
 git -C "$repo" diff --quiet
 git -C "$aici_root" diff --quiet
 git -C "$kitchen_root" diff --quiet
+"$aici" verify "$aici_root/contracts/build-toolchain-v0.contract.tsv" "$repo"
 var temporary = "$(mktemp -d)"
 cd -- "$temporary"
 JOBICY_PROGRAM="$program" "$grease" "$repo/checkpoints/jobicy/check.grease"
