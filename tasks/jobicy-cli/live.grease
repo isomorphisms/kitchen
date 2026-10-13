@@ -26,7 +26,7 @@ if (result === 0) {
   if (traversal_result !== 0 and traversal_result !== 9) { cat traversal.stderr >&2; exit "$traversal_result" }
   if (traversal_result === 9) {
     test ! -s traversal.jsonl
-    grep -F PARTIAL_TRAVERSAL traversal.stderr > /dev/null
+    grep -F 'page safety bound reached' traversal.stderr > /dev/null
     printf 'live-cursor-traversal\tPASS\tbound-rejection-exit=9\n'
   } else {
     printf 'live-cursor-traversal\tPASS\twindow-exhausted\n'
