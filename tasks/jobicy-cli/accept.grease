@@ -1,0 +1,36 @@
+#!/usr/bin/env grease
+if (int($#) !== 8) { echo 'requires CLI_ROOT CLI_HEAD PROGRAM GREASE AICI_ROOT AICI_HEAD AICI KITCHEN_HEAD' >&2; exit 2 }
+var repo = $1
+var source_head = $2
+var program = $3
+var grease = $4
+var aici_root = $5
+var aici_head = $6
+var aici = $7
+var kitchen_head = $8
+var parent = "$(dirname -- "$0")"
+var kitchen_root = "$(cd -- "$parent/../.." && pwd)"
+test "$(git -C "$repo" rev-parse HEAD)" = "$source_head"
+test "$(git -C "$aici_root" rev-parse HEAD)" = "$aici_head"
+test "$(git -C "$kitchen_root" rev-parse HEAD)" = "$kitchen_head"
+git -C "$repo" diff --quiet
+git -C "$aici_root" diff --quiet
+git -C "$kitchen_root" diff --quiet
+var temporary = "$(mktemp -d)"
+cd -- "$temporary"
+JOBICY_PROGRAM="$program" "$grease" "$repo/checkpoints/jobicy/check.grease"
+"$program" fixture "$repo/checkpoints/jobicy/fixtures/status.json" > status.tsv
+tail -n +2 status.tsv | cut -f3,4 > actual.tsv
+cp "$aici_root/jobicy/status.expected.tsv" expected.tsv
+"$aici" verify "$aici_root/jobicy/status.contract.tsv" "$temporary"
+cp actual.tsv accepted.tsv
+sed 's/^123458\tunknown$/123458\tclosed/' accepted.tsv > actual.tsv
+try { "$aici" verify "$aici_root/jobicy/status.contract.tsv" "$temporary" > mutant.stdout 2> mutant.stderr }
+if (_error.code !== 1) { echo 'FAIL independent oracle did not reject the unknown-to-closed mutant'; exit 1 }
+grep -F JOBICY-STATUS-DISTINCTIONS mutant.stdout > /dev/null
+cp accepted.tsv actual.tsv
+printf 'PASS\tindependent-status-oracle\nPASS\tunknown-to-closed-mutant-rejected\n'
+printf 'cli-head\t%s\naici-head\t%s\nkitchen-head\t%s\n' "$source_head" "$aici_head" "$kitchen_head"
+cat "$repo/checkpoints/jobicy/source-pins.tsv"
+sha256sum "$program" "$[program]_app/jobicy.so" "$[program]_app/libicu_transport.so" "$grease" "$aici"
+printf 'a1-arm32\tNOT_RUN\nc67-arm64\tNOT_RUN\nevidence\t%s\n' "$temporary"

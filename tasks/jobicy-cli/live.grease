@@ -1,0 +1,19 @@
+#!/usr/bin/env grease
+if (int($#) !== 2) { echo 'requires INSTALLED_PROGRAM ABSOLUTE_EVIDENCE_PARENT' >&2; exit 2 }
+var program = $1
+var parent = $2
+test -x "$program"
+test -d "$parent"
+var temporary = "$(mktemp -d)"
+cd -- "$temporary"
+try { "$program" search --count 3 --geo usa --format jsonl --evidence-dir "$parent" > jobs.jsonl 2> search.stderr }
+var result = _error.code
+cat jobs.jsonl
+cat search.stderr >&2
+printf 'actual-exit\t%s\n' "$result"
+if (result === 0) {
+  printf 'live-provider\tPASS\noutput\t%s/jobs.jsonl\n' "$temporary"
+} else {
+  printf 'live-provider\tBLOCKED\noutput\t%s/jobs.jsonl\n' "$temporary"
+  exit "$result"
+}
