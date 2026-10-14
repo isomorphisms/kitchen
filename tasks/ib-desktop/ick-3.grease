@@ -1,0 +1,53 @@
+#!/usr/bin/env grease
+# Explicit producer build; package provisioning is a separately recorded stage.
+if (int($#) !== 8) {
+  echo 'requires ABS_AICI_PRODUCER ABS_ICK_SOURCE ABS_BUILD ABS_STAGE ABS_OUTPUT ABS_GREASE ABS_IKE JOBS' >&2
+  exit 2
+}
+var producer = $1
+var source = $2
+var build = $3
+var stage = $4
+var output = $5
+var grease = $6
+var ike = $7
+var jobs = $8
+proc absolute_path (value) {
+  if (not value.startsWith('/') or value.contains(u'\n') or value.contains(u'\r') or value.contains(u'\t')) {
+    echo 'requires an absolute path without record separators' >&2
+    exit 2
+  }
+}
+absolute_path "$producer"
+absolute_path "$source"
+absolute_path "$build"
+absolute_path "$stage"
+absolute_path "$output"
+absolute_path "$grease"
+absolute_path "$ike"
+if (jobs !== '1' and jobs !== '2' and jobs !== '3' and jobs !== '4' and jobs !== '5' and jobs !== '6' and jobs !== '7' and jobs !== '8') {
+  echo 'build worker bound must be 1 through 8' >&2
+  exit 2
+}
+test "$(uname -s)" = Linux
+test "$(uname -m)" = x86_64
+test "$(git -C "$producer" rev-parse HEAD)" = ba3ff90023b09e525313793554edecf2141ff95b
+test "$(git -C "$source" rev-parse HEAD)" = c61e448251744a2f40ad743ebef1a027bdcd2f9d
+test "$(git -C "$source/gcc" rev-parse HEAD)" = 6294f1d9e7536e5ffcde09d1528c918d63abfef5
+git -C "$producer" diff --exit-code HEAD -- ick-host
+git -C "$source" diff --exit-code HEAD
+test ! -e "$output/Ikefile"
+mkdir -p -- "$output"
+var makefile = "$producer/ick-host/Makefile"
+var build_recipe = "make -f '" ++ makefile.replace("'", "'\\''") ++ "' 'ICK_SOURCE=" ++ source.replace("'", "'\\''") ++ "' 'ICK_BUILD=" ++ build.replace("'", "'\\''") ++ "' 'ICK_STAGE=" ++ stage.replace("'", "'\\''") ++ "' BUILD_JOBS=" ++ jobs
+var qualify_recipe = "make -f '" ++ makefile.replace("'", "'\\''") ++ "' qualify 'ICK_STAGE=" ++ stage.replace("'", "'\\''") ++ "'"
+write -- 'native-ick depends on' "    $build_recipe" 'qualified-ick depends on native-ick' "    $qualify_recipe" > "$output/Ikefile"
+sha256sum "$makefile" "$producer/ick-host/assignment-arrow.c" > "$output/producer.sha256"
+sha256sum "$output/Ikefile" > "$output/Ikefile.sha256"
+var identity_line = "$(cat "$output/Ikefile.sha256")"
+var identity = identity_line.split(' ')[0]
+cd -- "$output"
+env IKE_RECIPE_RUNNER="$grease" IKE_RECEIPT="$output/ike.tsv" IKE_IKEFILE_IDENTITY="sha256:$identity" "$ike" qualified-ick
+sha256sum --check "$output/Ikefile.sha256"
+"$stage/bin/gcc" -dumpmachine > "$output/compiler-target.txt"
+echo 'native-ick-producer=PASS'
