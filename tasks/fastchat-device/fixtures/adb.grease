@@ -1,0 +1,64 @@
+#!/usr/bin/env grease
+# Synthetic command channel. This is never physical-device evidence.
+set -eu -o pipefail
+printf '%s ' @ARGV >> "$[ENV.FC_FIXTURE_LOG]"
+printf '\n' >> "$[ENV.FC_FIXTURE_LOG]"
+if (len(ARGV) < 3 or ARGV[0] !== '-s' or ARGV[1] !== 'synthetic-serial') { exit 2 }
+var arguments = ARGV[2:]
+var operation = arguments[0]
+var defect = get(ENV, 'FC_FIXTURE_DEFECT') or ''
+var state = ENV.FC_FIXTURE_STATE
+if (operation === 'get-state') { echo device; exit 0 }
+if (operation === 'install') {
+  if (defect === 'install') { echo 'Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE]'; exit 1 }
+  echo Success; exit 0
+}
+if (operation === 'pull') { cp "$[ENV.FC_FIXTURE_APK]" "$[arguments[2]]"; exit 0 }
+if (operation === 'logcat') {
+  var source = ENV.FC_FIXTURE_SOURCE
+  if (defect === 'source') { setvar source = '0000000000000000000000000000000000000000' }
+  var count = $(cat "$state/count")
+  var store = $(cat "$state/store")
+  if (count === '1') {
+    echo "source=$source store=$store phase=idle request=0 attempt=0 committed=0 session_ns=1"
+    echo "source=$source prefix request=1 attempt=1 committed=400 session_ns=1"
+    echo 'first_posted_ns=1000000 peak_rss_kib=1000 steady_rss_kib=900'
+  } else {
+    var bytes = '400'
+    if (defect === 'replay') { setvar bytes = '399' }
+    echo "source=$source store=$store phase=uncertain delivery request=1 attempt=1 committed=$bytes session_ns=2"
+    echo 'replay_ns=1000000'
+  }
+  exit 0
+}
+if (operation !== 'shell' or len(arguments) < 2) { exit 2 }
+var command = arguments[1]
+if (command === 'getprop') {
+  var property = arguments[2]
+  if (property === 'ro.product.device') { echo Miro_C67 } elif (property === 'ro.product.model') {
+    if (defect === 'model') { echo TAB_P10 } else { echo 'Miro C67' }
+  } elif (property === 'ro.product.cpu.abi') {
+    if (defect === 'abi') { echo armeabi-v7a } else { echo arm64-v8a }
+  } elif (property === 'ro.build.fingerprint') {
+    echo synthetic-fingerprint
+  } elif (property === 'ro.kernel.qemu') {
+    if (defect === 'emulator') { echo 1 } else { echo 0 }
+  } else { exit 2 }
+} elif (command === 'pm') { echo 'package:/synthetic/installed.apk' } elif (command === 'pidof') {
+  if (defect === 'running') { echo 900; exit 0 }
+  if test -f "$state/active" { cat "$state/active" } else { exit 1 }
+} elif (command === 'dumpsys') { echo 'TOTAL PSS: 1000'; echo 'synthetic memory observation' } elif (command === 'am') {
+  if (arguments[2] === 'force-stop') { rm -f "$state/active" } elif (arguments[2] === 'start') {
+    var count = 0
+    if test -f "$state/count" { setvar count = int($(cat "$state/count")) }
+    setvar count += 1
+    echo "$count" > "$state/count"
+    echo $[1000 + count] > "$state/active"
+    var index = 0
+    while (index+1 < len(arguments)) {
+      if (arguments[index] === 'fastchat_acceptance_store') { echo "$[arguments[index+1]]" > "$state/store" }
+      setvar index += 1
+    }
+    echo 'Status: ok'
+  } else { exit 2 }
+} else { exit 2 }

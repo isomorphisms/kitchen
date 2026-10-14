@@ -1,0 +1,56 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (len(ARGV) !== 3) { echo 'requires GREASE CATFOOD OUTPUT'; exit 2 }
+var runtime = ARGV[0]
+var catfood = ARGV[1]
+var output = ARGV[2]
+var directory = $(dirname "$0")
+var here = $(realpath "$directory")
+test ! -e "$output"
+mkdir -p "$output/bin"
+var runtime_directory = $(dirname "$runtime")
+setglobal ENV.PATH = "$runtime_directory:/usr/bin:/bin"
+setglobal ENV.FC_FIXTURE_SOURCE = '442e8135c018ee003021f1c3f681686c80be9fd0'
+setglobal ENV.FC_FIXTURE_APK = "$output/synthetic.apk"
+printf 'synthetic artifact; not an APK or device receipt\n' > "$[ENV.FC_FIXTURE_APK]"
+var digest = $(sha256sum "$[ENV.FC_FIXTURE_APK]" | awk '{print $1}')
+proc run_case(name, mode, defect, expected) {
+  setglobal ENV.FC_FIXTURE_DEFECT = defect
+  setglobal ENV.FC_FIXTURE_LOG = "$output/$name.commands"
+  setglobal ENV.FC_FIXTURE_STATE = "$output/$name-state"
+  mkdir -p "$[ENV.FC_FIXTURE_STATE]"
+  var observed = 0
+  var requested_digest = digest
+  if (defect === 'digest') { setvar requested_digest = '0000000000000000000000000000000000000000000000000000000000000000' }
+  if "$runtime" "$here/4.grease" "$mode" "$here/fixtures/adb.grease" synthetic-serial c67 "$catfood" "$[ENV.FC_FIXTURE_APK]" "$requested_digest" "$[ENV.FC_FIXTURE_SOURCE]" "$here/fixtures/aapt2.grease" "$here/fixtures/apksigner.grease" "$runtime" "$output/$name" > "$output/$name.log" 2>&1 {
+    setvar observed = 1
+  }
+  if (observed !== int(expected)) { cat "$output/$name.log"; echo "FAIL $name"; exit 1 }
+  if (int(expected) === 0 and defect !== 'install' and defect !== 'source' and defect !== 'replay') {
+    if test -f "$[ENV.FC_FIXTURE_LOG]" {
+      if rg -q ' install | shell am ' "$[ENV.FC_FIXTURE_LOG]" { echo "FAIL effects before $name refusal"; exit 1 }
+    }
+  }
+  echo "PASS synthetic $name"
+}
+run_case inspect inspect '' 1
+if rg -q ' install | shell am ' "$output/inspect.commands" { echo 'FAIL inspect mutated device'; exit 1 }
+run_case install install '' 1
+run_case replay exercise '' 1
+run_case wrong-model inspect model 0
+run_case wrong-abi inspect abi 0
+run_case wrong-digest install digest 0
+run_case emulator inspect emulator 0
+run_case wrong-signer install signer 0
+run_case install-failed install install 0
+run_case existing-work exercise running 0
+run_case stale-source exercise source 0
+run_case prefix-loss exercise replay 0
+git clone --quiet --shared -- "$catfood" "$output/catfood-origin-fixture"
+setvar catfood = "$output/catfood-origin-fixture"
+git -C "$catfood" remote set-url origin https://github.com/isomorphisms/catfood
+run_case no-suffix-origin inspect '' 1
+git -C "$catfood" remote set-url origin https://github.com/not-isomorphisms/catfood.git
+run_case wrong-origin inspect origin 0
+if rg -q -g '*.commands' 'uninstall|clear|--allow-downgrade| install -r -d' "$output" { echo 'FAIL destructive or hidden operation'; exit 1 }
+echo 'PASS candidate control-flow fixtures; physical and independent acceptance NOT_RUN'
