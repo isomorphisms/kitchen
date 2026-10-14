@@ -10,7 +10,26 @@ jobs:
     steps:
       - uses: isomorphisms/ai-ci/transfer-handoff@ecd83379d01911b83bf9c38e92561009a47020f3
         with:
-          catfood_ref: c16dcf0ab5057cbfd9cc7b0fedad587300724873
+          catfood_ref: 3eb5595b846d44105e171094fae38ad559ee16ad
           kitchen_ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fp_ref: 41598f0f795e6b377f42af7f3da82186cb35ec81
           aici_ref: ecd83379d01911b83bf9c38e92561009a47020f3
+      - name: Captured Android classification fixtures
+        shell: sh
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+        run: '"$RUNNER_TEMP/native-grease/bin/grease" "$GITHUB_WORKSPACE/catfood/tests/classify-target.grease"'
+      - name: FastChat isolated device control fixtures
+        shell: sh
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+        run: |
+          "$RUNNER_TEMP/native-grease/bin/grease" "$GITHUB_WORKSPACE/kitchen/tasks/fastchat-device/test.grease" \
+            "$RUNNER_TEMP/native-grease/bin/grease" "$GITHUB_WORKSPACE/catfood/catfood" "$RUNNER_TEMP/fc-m4-fixtures"
+      - name: Preserve synthetic fixture results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: fc-m4-synthetic-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/fc-m4-fixtures
+          if-no-files-found: warn
