@@ -1,0 +1,24 @@
+#!/usr/bin/env grease
+set -eu
+root=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+runner=${GREASE:?verified Grease runtime required}
+source=${STORAGE_IB_ROOT:?explicit IB source required}
+revision=${STORAGE_IB_REVISION:?exact committed IB revision required}
+temporary=$(mktemp -d)
+trap 'rm -rf -- "$temporary"' EXIT HUP INT TERM
+git clone --quiet --no-hardlinks "$source" "$temporary/ib"
+git -C "$temporary/ib" remote set-url origin https://github.com/isomorphisms/ib.git
+test "$(git -C "$temporary/ib" rev-parse HEAD)" = "$revision"
+export STORAGE_IB_ROOT=$temporary/ib
+# Two independent invocations from an unrelated working directory.
+cd /
+STORAGE_RECEIPT_DIR=$temporary/first "$runner" "$root/1.grease"
+STORAGE_RECEIPT_DIR=$temporary/second "$runner" "$root/1.grease"
+cmp "$temporary/first/stdout.txt" "$temporary/second/stdout.txt"
+if STORAGE_RECEIPT_DIR=$temporary/first "$runner" "$root/1.grease" 2> "$temporary/error"; then exit 1; fi
+grep -F 'already exists' "$temporary/error" >/dev/null
+printf '\n# dirty implementation\n' >> "$temporary/ib/bin/ib-source.grease"
+if STORAGE_RECEIPT_DIR=$temporary/dirty "$runner" "$root/1.grease" 2> "$temporary/error"; then exit 1; fi
+grep -F 'bytes differ' "$temporary/error" >/dev/null
+test ! -e "$temporary/dirty"
+printf 'PASS Kitchen storage preparation, repeatability, arbitrary cwd and dirty-source refusal\n'
