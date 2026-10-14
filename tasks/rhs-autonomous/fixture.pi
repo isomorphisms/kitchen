@@ -1,0 +1,12 @@
+"""Sequencing fixture only; never a native compiler or RHS success receipt."""
+import os
+import sys
+from pathlib import Path
+environment ∈ dict[str, str] ← os.environ
+arguments ∈ list[str] ← sys.argv
+trace ∈ str ← environment["RHS_KITCHEN_FIXTURE_LOG"]
+before ∈ str ← ""
+if Path(trace).exists():
+    before ← Path(trace).read_text()
+Path(trace).write_text(before + str("\t".join(arguments[1:])) + "\n")
+print("FIXTURE checker invocation recorded; no RHS acceptance")

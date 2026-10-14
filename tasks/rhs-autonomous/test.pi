@@ -1,0 +1,33 @@
+"""Actual Grease path guards and checker ordering against an explicit fixture."""
+import os
+import sys
+import tempfile
+import subprocess
+from pathlib import Path
+from builtins import ValueError
+arguments ∈ list[str] ← sys.argv
+directory ∈ str ← str(Path(__file__).resolve().parent)
+temporary ∈ str ← tempfile.mkdtemp(prefix="rhs-kitchen-")
+environment ∈ dict[str, str] ← os.environ.copy()
+environment["ASAN_OPTIONS"] ← "detect_leaks=0"
+environment["RHS_KITCHEN_FIXTURE_LOG"] ← temporary + "/trace.tsv"
+command ∈ list[str] ← [arguments[1], directory + "/2.grease", temporary, temporary + "/evidence", arguments[2], directory + "/fixture.pi"]
+good ∈ object ← subprocess.run(command, env=environment, capture_output=True)
+code ∈ int ← good.returncode
+trace ∈ str ← Path(temporary + "/trace.tsv").read_text()
+if code != 0 or trace != "selftest\n" + temporary + "\t" + temporary + "/evidence\n":
+    raise ValueError("Kitchen did not reach the checker in the required order")
+for index in [2, 3, 4, 5]:
+    bad ∈ list[str] ← command.copy()
+    bad[index] ← "relative"
+    result ∈ object ← subprocess.run(bad, env=environment, capture_output=True)
+    status ∈ int ← result.returncode
+    if status == 0:
+        raise ValueError("Kitchen admitted a relative path")
+bad ∈ list[str] ← command.copy()
+bad[4] ← temporary + "/missing-ithon"
+result ∈ object ← subprocess.run(bad, env=environment, capture_output=True)
+status ∈ int ← result.returncode
+if status == 0:
+    raise ValueError("Kitchen admitted a missing dependency")
+print("PASS six actual Grease sequencing/path fixtures; native RHS acceptance not claimed")
