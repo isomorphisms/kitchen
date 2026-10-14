@@ -1,0 +1,83 @@
+#!/usr/bin/env grease
+# Exact-coefficient JS consumer path, separate from native Idric acceptance.
+if (int($#) !== 11) {
+  echo 'requires MODE ABS_DIRICHLET ABS_NODE ABS_OUTPUT ABS_GREASE ABS_IKE BASE_HEAD REL_MODULE MODULE_SHA256 REL_TEST TEST_SHA256' >&2
+  exit 2
+}
+var mode = $1
+var source = $2
+var node = $3
+var output = $4
+var grease = $5
+var ike = $6
+var source_head = $7
+var relative_module = $8
+var module_sha256 = $9
+var relative_test = ${10}
+var test_sha256 = ${11}
+var self = "$(realpath -- "$0")"
+
+proc absolute_path (value) {
+  if (not value.startsWith('/') or value.contains(u'\n') or value.contains(u'\r') or value.contains(u'\t')) {
+    echo 'requires an absolute path without record separators' >&2
+    exit 2
+  }
+}
+func native_word (value) {
+  return ("u'" ++ value.replace(u'\\', u'\\\\').replace("'", "\\'") ++ "'")
+}
+absolute_path "$source"
+absolute_path "$node"
+absolute_path "$output"
+absolute_path "$grease"
+absolute_path "$ike"
+test "$(uname -s)" = Linux
+test "$(uname -m)" = x86_64
+test "$(git -C "$source" rev-parse HEAD)" = "$source_head"
+var source_root = "$(realpath -- "$source")"
+var module_file = "$(realpath -- "$source/$relative_module")"
+var test_file = "$(realpath -- "$source/$relative_test")"
+if (not module_file.startsWith(source_root ++ '/') or not test_file.startsWith(source_root ++ '/') or not relative_module.endsWith('.mjs') or not relative_test.endsWith('.mjs')) {
+  echo 'module and test must be mjs files contained by the named repository' >&2
+  exit 2
+}
+test "$(dirname -- "$module_file")" = "$(dirname -- "$test_file")"
+test "$module_file" != "$test_file"
+printf '%s  %s\n' "$module_sha256" "$module_file" "$test_sha256" "$test_file" | sha256sum --check --status
+test -x "$node"
+test -x "$grease"
+test -x "$ike"
+
+if (mode === 'run') {
+  test ! -e "$output"
+  mkdir -p -- "$output"
+  var recipe = native_word(grease) ++ " " ++ native_word(self) ++ " check " ++ native_word(source) ++ " " ++ native_word(node) ++ " " ++ native_word(output) ++ " " ++ native_word(grease) ++ " " ++ native_word(ike) ++ " " ++ native_word(source_head) ++ " " ++ native_word(relative_module) ++ " " ++ native_word(module_sha256) ++ " " ++ native_word(relative_test) ++ " " ++ native_word(test_sha256)
+  write -- 'exact-coefficients depends on' "    $recipe" > "$output/Ikefile"
+  sha256sum "$output/Ikefile" > "$output/Ikefile.sha256"
+  var identity_line = "$(cat "$output/Ikefile.sha256")"
+  var identity = identity_line.split(' ')[0]
+  cd -- "$output"
+  env IKE_RECIPE_RUNNER="$grease" IKE_RECEIPT="$output/ike.tsv" IKE_IKEFILE_IDENTITY="sha256:$identity" "$ike" exact-coefficients
+  sha256sum --check "$output/Ikefile.sha256"
+} elif (mode === 'check') {
+  test -d "$output"
+  test ! -e "$output/snapshot"
+  mkdir -- "$output/snapshot"
+  var module_name = "$(basename -- "$module_file")"
+  var test_name = "$(basename -- "$test_file")"
+  cp -- "$module_file" "$output/snapshot/$module_name"
+  cp -- "$test_file" "$output/snapshot/$test_name"
+  sha256sum "$output/snapshot/$module_name" "$output/snapshot/$test_name" "$node" "$grease" "$ike" "$self" > "$output/inputs.sha256"
+  git -C "$source" rev-parse HEAD > "$output/base-head.txt"
+  git -C "$source" status --short -- "$relative_module" "$relative_test" > "$output/source-worktree-status.txt"
+  printf 'implementation\t%s\nimplementation-sha256\t%s\ntest\t%s\ntest-sha256\t%s\nbase-head-is-not-a-dirty-candidate-commit\ttrue\n' "$relative_module" "$module_sha256" "$relative_test" "$test_sha256" > "$output/source-identity.tsv"
+  "$node" --version > "$output/node-version.txt" 2>&1
+  cd -- "$output/snapshot"
+  "$node" "$test_name" > "$output/test.stdout" 2> "$output/test.stderr"
+  sha256sum --check "$output/inputs.sha256" > "$output/inputs-unchanged.txt"
+  printf 'exact-coefficient-tests\tPASS\nnative-idric\tSEPARATE_ATTEMPT\nindependent-aici\tNOT_RUN\ntrusted-dispatch\tNOT_VERIFIED\nplatform-delivery\tNOT_VERIFIED\nphysical-device\tNOT_RUN\n' > "$output/evidence.tsv"
+  cat "$output/test.stdout" "$output/evidence.tsv"
+} else {
+  echo 'mode must be run or check' >&2
+  exit 2
+}

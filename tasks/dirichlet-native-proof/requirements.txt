@@ -1,0 +1,15 @@
+Target: observed disposable Ubuntu 24.04.3 Linux x86_64 build container.
+Candidate 1: check unchanged Dirichlet geometric witnesses using pinned native Idriç.
+Require controller-pinned source HEAD and file SHA-256 before creating an attempt.
+Require fresh attempt, source snapshot and build directory; never silently reuse output.
+Run through actual Ike with native Grease recipe-runner identity and Ikefile digest.
+Retain compiler stdout/stderr and actual failure in Ike/FP; do not mask a rejected source.
+Successful process status without a fresh GeometricFinite.ttc is insufficient.
+This candidate does not yet implement the independent AI-CI false-witness oracle.
+No full compiler correctness, quantified theorem, installed authority, service delivery or device acceptance claim.
+Grease ASAN leak checking is disabled only for restricted-container diagnostic execution, matching the existing IB recipe's declared limitation.
+Shell design recovered from isomorphisms/kitchen@1a1c31236947ed3df50e94342276d1ae1280f986 tasks/ib-desktop/7.grease and pipeline.grease.
+
+Candidate 2 extends the unchanged source-check route to explicit content-pinned modules. Reject an escaped path, wrong HEAD/hash and reused attempt. Record uncommitted source by bytes; base HEAD is not its candidate commit.
+Candidate 3 freezes one same-directory JS implementation/test pair, exact Node runtime and real Ike execution. Test source mutation and runtime failure must fail the command stage.
+Candidate 4 freezes the independently owned checker separately from the implementation; pass the implementation digest to that checker. Independent mathematical checks, independent promotion and platform acceptance remain distinct statuses.
