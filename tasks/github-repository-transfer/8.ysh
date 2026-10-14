@@ -1,0 +1,139 @@
+#!/usr/bin/env grease
+# Candidate 8: refuse destination redirects before any mutation.
+set -eu
+fail() { printf 'FAIL GitHub transfer: %s\n' "$*" >&2; exit 1; }
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+test "$#" -eq 6 || fail 'six bound identity arguments required'
+source_owner=$1
+repository=$2
+organization=$3
+expected_login=$4
+expected_id=$5
+expected_upstream=$6
+source_name=$source_owner/$repository
+destination=$organization/$repository
+mode=$[get(ENV, 'FP_TRANSFER_MODE', '')]
+state=$[get(ENV, 'FP_TRANSFER_STATE', '')]
+case $mode in preflight|execute|verify) true;; *) fail 'FP_TRANSFER_MODE must be preflight, execute or verify';; esac
+case $state in /*) true;; *) fail 'FP_TRANSFER_STATE must be an absolute durable directory';; esac
+for utility in gh timeout mktemp mkdir cat cut tr grep cmp sync ln sleep; do
+    command -v "$utility" >/dev/null 2>&1 || fail "missing runtime requirement: $utility"
+done
+umask 077
+mkdir -p "$state"
+attempt=$(mktemp -d "$state/observation.XXXXXX")
+printf '%s\t%s\t%s\t%s\t%s\n' "$source_name" "$destination" "$expected_login" "$expected_id" "$expected_upstream" > "$attempt/identity.tsv"
+if test -e "$state/identity.tsv"; then
+    cmp "$attempt/identity.tsv" "$state/identity.tsv" || fail 'durable operation identity differs'
+else
+    # Atomic first-writer claim; concurrent identical invocations may observe it.
+    try { ln "$attempt/identity.tsv" "$state/identity.tsv" }
+    if (_error.code !== 0) { cmp "$attempt/identity.tsv" "$state/identity.tsv" || fail 'concurrent operation identity differs' }
+fi
+setglobal ENV.GH_TOKEN = null
+setglobal ENV.GITHUB_TOKEN = null
+setglobal ENV.GH_HOST = 'github.com'
+
+query() {
+    label=$1
+    shift
+    try { timeout 25 gh "$@" > "$attempt/$label.stdout" 2> "$attempt/$label.stderr" }
+    var code = _error.code
+    printf '%s\n' "$code" > "$attempt/$label.exit"
+    if (code !== 0) {
+        cat "$attempt/$label.stdout" "$attempt/$label.stderr" >&2
+        return 1
+    }
+}
+query auth auth status --hostname github.com
+query login api user --jq '.login'
+login=$(cat "$attempt/login.stdout")
+login_key=$(lower "$login")
+expected_login_key=$(lower "$expected_login")
+test "$login_key" = "$expected_login_key" || fail "authenticated as $login, expected $expected_login"
+query organization api "orgs/$organization" --jq '.login'
+canonical_organization=$(cat "$attempt/organization.stdout")
+organization_key=$(lower "$canonical_organization")
+expected_organization_key=$(lower "$organization")
+test "$organization_key" = "$expected_organization_key" || fail 'organization redirects to a different identity'
+
+# One API response binds name, ID and original fork together.
+repository_query='[.id, .full_name, .fork, (.parent.full_name // "-"), (.source.full_name // "-"), (.permissions.admin // false)] | @tsv'
+destination_key=$(lower "$destination")
+source_key=$(lower "$source_name")
+check_identity() {
+    snapshot=$1
+    observed_id=$(cut -f1 "$snapshot")
+    observed_upstream=$(cut -f4 "$snapshot")
+    observed_root=$(cut -f5 "$snapshot")
+    test "$observed_id" = "$expected_id" || fail 'repository ID differs from immutable pin'
+    observed_upstream_key=$(lower "$observed_upstream")
+    upstream_key=$(lower "$expected_upstream")
+    observed_root_key=$(lower "$observed_root")
+    test "$observed_upstream_key" = "$upstream_key" && test "$observed_root_key" = "$upstream_key" || fail 'original upstream fork relationship changed'
+    observed_fork=$(cut -f3 "$snapshot")
+    if test "$expected_upstream" = '-'; then
+        test "$observed_fork" = false || fail 'nonfork identity changed'
+    else
+        test "$observed_fork" = true || fail 'fork identity changed'
+    fi
+}
+read_destination() {
+    label=$1
+    try { query "$label" api "repos/$destination" --jq "$repository_query" }
+    if (_error.code !== 0) {
+        try { grep -E '"status"[[:space:]]*:[[:space:]]*"404"' "$attempt/$label.stdout" >/dev/null }
+        if (_error.code === 0) { return 3 }
+        fail "destination lookup failed; retained stdout, stderr and status in $attempt"
+    }
+    name=$(cut -f2 "$attempt/$label.stdout")
+    name_key=$(lower "$name")
+    test "$name_key" = "$destination_key" || return 4
+    check_identity "$attempt/$label.stdout"
+}
+try { read_destination destination }
+var destination_status = _error.code
+if (destination_status === 0) {
+    printf 'status=verified\naction=already_transferred\nrepository_id=%s\nrepository_url=https://github.com/%s\nupstream=%s\nevidence=%s\n' "$expected_id" "$destination" "$expected_upstream" "$attempt"
+    exit 0
+}
+test "$mode" != verify || fail 'destination is not independently verified'
+test "$destination_status" = 3 || fail 'destination redirects to another canonical repository'
+query source api "repos/$source_name" --jq "$repository_query"
+check_identity "$attempt/source.stdout"
+observed_source=$(cut -f2 "$attempt/source.stdout")
+observed_source_key=$(lower "$observed_source")
+test "$observed_source_key" = "$source_key" || fail "source redirects to $observed_source without a verified destination"
+administrator=$(cut -f6 "$attempt/source.stdout")
+test "$administrator" = true || fail 'source administrator permission required'
+query membership api "user/memberships/orgs/$organization" --jq '[.state,.role] | @tsv'
+membership=$(cut -f1 "$attempt/membership.stdout")
+role=$(cut -f2 "$attempt/membership.stdout")
+test "$membership" = active || fail 'active organization membership required'
+if test "$role" != admin; then
+    query create_permission api "orgs/$organization" --jq '.members_can_create_repositories'
+    permission=$(cat "$attempt/create_permission.stdout")
+    test "$permission" = true || fail 'organization repository creation permission not established'
+fi
+if test "$mode" = preflight; then
+    printf 'status=preflight\nrepository_id=%s\nevidence=%s\n' "$expected_id" "$attempt"
+    exit 0
+fi
+# Never remove this marker, including after a rejected/timed-out POST. A later
+# run may verify convergence, but cannot safely assume an ambiguous POST failed.
+try { mkdir "$state/post-attempted" }
+if (_error.code !== 0) { fail 'transfer was already attempted; verify only, no second POST' }
+printf '%s\n' "$attempt" > "$state/post-attempted/observation"
+sync
+query transfer api --method POST "repos/$source_name/transfer" -f "new_owner=$canonical_organization" --silent
+var index = 0
+while (index < 12) {
+    try { read_destination "verify-$index" }
+    if (_error.code === 0) {
+        printf 'status=verified\naction=transferred\nrepository_id=%s\nrepository_url=https://github.com/%s\nupstream=%s\nevidence=%s\n' "$expected_id" "$destination" "$expected_upstream" "$attempt"
+        exit 0
+    }
+    setvar index += 1
+    if (index < 12) { sleep 2 }
+}
+fail 'transfer attempted but convergence is unverified; rerun may verify, never POST again'
