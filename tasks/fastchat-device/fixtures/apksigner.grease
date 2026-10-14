@@ -1,0 +1,5 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+if (get(ENV, 'FC_FIXTURE_DEFECT') === 'signer') { echo 'Signer #1 certificate SHA-256 digest: wrong' } else {
+  echo 'Signer #1 certificate SHA-256 digest: aa9151e3922fa4795987c3655bc7aa4712620f1d94c24a2075acd7b29d8ac86e'
+}

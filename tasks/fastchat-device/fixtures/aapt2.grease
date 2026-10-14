@@ -1,0 +1,4 @@
+#!/usr/bin/env grease
+set -eu -o pipefail
+echo "package: name='org.isomorphisms.fastchat.diskstreaming.arena' versionCode='5' versionName='fixture'"
+echo "native-code: 'arm64-v8a'"

@@ -1,0 +1,124 @@
+#!/usr/bin/env grease
+# Host-side candidate. Captures are not independent or physical acceptance.
+set -eu -o pipefail
+if (len(ARGV) !== 12) {
+  echo 'requires MODE ADB SERIAL TARGET CATFOOD APK APK_SHA SOURCE AAPT2 APKSIGNER GREASE OUTPUT' >&2
+  exit 2
+}
+var mode = ARGV[0]
+var adb = ARGV[1]
+var serial = ARGV[2]
+var target = ARGV[3]
+var catfood = ARGV[4]
+var apk = ARGV[5]
+var digest = ARGV[6]
+var source = ARGV[7]
+var aapt = ARGV[8]
+var signer = ARGV[9]
+var runtime = ARGV[10]
+var output = ARGV[11]
+var directory = $(dirname "$0")
+var here = $(realpath "$directory")
+var package = 'org.isomorphisms.fastchat.diskstreaming.arena'
+var certificate = 'aa9151e3922fa4795987c3655bc7aa4712620f1d94c24a2075acd7b29d8ac86e'
+proc fail(message) { printf '\033[31mFAIL %s\033[0m\n' "$message" >&2; exit 2 }
+if (mode !== 'inspect' and mode !== 'install' and mode !== 'exercise') { fail 'unknown operation' }
+if (target !== 'phone' and target !== 'c67') { fail 'target must be phone or c67' }
+for path in ([adb, catfood, apk, aapt, signer, runtime, output]) {
+  if (not path.startsWith('/')) { fail 'paths must be absolute' }
+}
+echo "$serial" | rg -q '^[A-Za-z0-9_.:-]+$'
+echo "$digest" | rg -q '^[0-9a-f]{64}$'
+echo "$source" | rg -q '^[0-9a-f]{40}$'
+test -x "$adb"
+test -x "$aapt"
+test -x "$signer"
+test -x "$runtime"
+test -x "$catfood/catfood"
+test -f "$apk"
+test ! -e "$output"
+mkdir -m 0700 -p "$output"
+printf '%s\n' "$digest  $apk" | sha256sum -c - > "$output/apk-digest.txt"
+test $(git -C "$catfood" remote get-url origin) = https://github.com/isomorphisms/catfood.git
+git -C "$catfood" rev-parse HEAD > "$output/catfood-source.txt"
+sha256sum "$adb" "$aapt" "$signer" "$runtime" "$catfood/catfood" "$catfood/android/target.sh" "$here/2.grease" > "$output/tools.sha256"
+printf '\033[36mFastChat %s: observed device identity\033[0m\n' "$mode"
+test $("$adb" -s "$serial" get-state) = device
+for property in (:| ro.product.device ro.product.model ro.product.cpu.abi ro.build.fingerprint ro.kernel.qemu |) {
+  "$adb" -s "$serial" shell getprop "$property" > "$output/$property.txt"
+}
+test -s "$output/ro.product.model.txt"
+test -s "$output/ro.build.fingerprint.txt"
+var abi = $(cat "$output/ro.product.cpu.abi.txt")
+var expected = 'armeabi-v7a'
+if (target === 'c67') { setvar expected = 'arm64-v8a' }
+if (abi !== expected) { fail 'observed primary ABI contradicts selected target' }
+if ($(cat "$output/ro.kernel.qemu.txt") === '1') { fail 'emulator cannot supply handset capture' }
+var observed = $("$catfood/catfood" classify-android-target "$(cat "$output/ro.product.device.txt")" "$(cat "$output/ro.product.model.txt")" "$abi")
+if (observed !== target) { fail 'Cat Food target oracle disagrees' }
+"$aapt" dump badging "$apk" > "$output/apk-badging.txt"
+rg -F "package: name='$package'" "$output/apk-badging.txt"
+rg -F "native-code: '$expected'" "$output/apk-badging.txt"
+var version = $(awk -F "'" '/^package:/ {print $4}' "$output/apk-badging.txt")
+echo "$version" | rg -q '^[0-9]+$'
+"$signer" verify --print-certs "$apk" > "$output/apk-signature.txt"
+test $(awk '/Signer #[0-9]+ certificate SHA-256 digest:/ {print $NF}' "$output/apk-signature.txt") = "$certificate"
+printf '%s\t%s\n' schema fastchat-device-capture-v1 target "$target" device_instance "$serial" source "$source" apk_sha256 "$digest" abi "$expected" physical_acceptance NOT_VERIFIED > "$output/capture.tsv"
+if (mode === 'inspect') {
+  printf '%s\t%s\n' result PREFLIGHT_CAPTURED >> "$output/capture.tsv"
+  printf '\033[32mPASS preflight capture; device behavior remains unverified\033[0m\n'
+  exit 0
+}
+"$adb" -s "$serial" shell pm path "$package" > "$output/installed-path.txt"
+test $(wc -l < "$output/installed-path.txt") = 1
+var installed = $(sed -n 's/^package://p' "$output/installed-path.txt")
+if (not installed.startsWith('/')) { fail 'one existing installed base APK is required' }
+"$adb" -s "$serial" pull "$installed" "$output/installed-before.apk" > "$output/pull-before.txt"
+"$signer" verify --print-certs "$output/installed-before.apk" > "$output/installed-signature.txt"
+test $(awk '/Signer #[0-9]+ certificate SHA-256 digest:/ {print $NF}' "$output/installed-signature.txt") = "$certificate"
+"$aapt" dump badging "$output/installed-before.apk" > "$output/installed-badging.txt"
+var old_version = $(awk -F "'" '/^package:/ {print $4}' "$output/installed-badging.txt")
+echo "$old_version" | rg -q '^[0-9]+$'
+if (int(old_version) > int(version)) { fail 'replacement would downgrade the installed application' }
+if (mode === 'install') {
+  printf '\033[33mReplacement installation preserves application data\033[0m\n'
+  "$adb" -s "$serial" install -r "$apk" > "$output/install.txt"
+  rg -Fx Success "$output/install.txt"
+  "$adb" -s "$serial" shell pm path "$package" > "$output/installed-after-path.txt"
+  test $(wc -l < "$output/installed-after-path.txt") = 1
+  var replacement = $(sed -n 's/^package://p' "$output/installed-after-path.txt")
+  if (not replacement.startsWith('/')) { fail 'installed replacement path missing' }
+  "$adb" -s "$serial" pull "$replacement" "$output/installed-after.apk" > "$output/pull-after.txt"
+  printf '%s\n' "$digest  $output/installed-after.apk" | sha256sum -c - > "$output/installed-digest.txt"
+  printf '%s\t%s\n' result INSTALL_CAPTURED >> "$output/capture.tsv"
+  exit 0
+}
+printf '%s\n' "$digest  $output/installed-before.apk" | sha256sum -c - > "$output/installed-digest.txt"
+var store = 'fc-m4-' ++ $(basename "$output")
+echo "$store" | rg -q '^fc-m4-[A-Za-z0-9-]{1,70}$'
+printf '\033[33mStart isolated deterministic fixture, capture, then stop and replay\033[0m\n'
+"$adb" -s "$serial" shell am force-stop "$package"
+"$adb" -s "$serial" shell am start -W -n "$package/android.app.NativeActivity" --es fastchat_acceptance_store "$store" --es fastchat_acceptance_fixture :long > "$output/start.txt"
+sleep 2
+var first_pid = $("$adb" -s "$serial" shell pidof "$package")
+echo "$first_pid" | rg -q '^[0-9]+$'
+"$adb" -s "$serial" logcat -d --pid="$first_pid" -s FastChat:I > "$output/stream.log"
+"$adb" -s "$serial" shell dumpsys meminfo "$package" > "$output/stream-memory.txt"
+rg -F "source=$source store=$store phase=idle request=0 attempt=0 committed=0" "$output/stream.log"
+rg -F "source=$source prefix request=1 attempt=1 committed=" "$output/stream.log"
+"$adb" -s "$serial" shell am force-stop "$package"
+if "$adb" -s "$serial" shell pidof "$package" > "$output/stopped-pid.txt" { fail 'FastChat process still present after stop' }
+"$adb" -s "$serial" shell am start -W -n "$package/android.app.NativeActivity" --es fastchat_acceptance_store "$store" > "$output/restart.txt"
+sleep 1
+var second_pid = $("$adb" -s "$serial" shell pidof "$package")
+echo "$second_pid" | rg -q '^[0-9]+$'
+if (first_pid === second_pid) { fail 'restart did not produce a fresh process identity' }
+"$adb" -s "$serial" logcat -d --pid="$second_pid" -s FastChat:I > "$output/replay.log"
+"$adb" -s "$serial" shell dumpsys meminfo "$package" > "$output/replay-memory.txt"
+rg -F "source=$source store=$store phase=uncertain delivery request=1 attempt=1 committed=" "$output/replay.log"
+var committed = $(rg -F "source=$source prefix request=1 attempt=1 committed=" "$output/stream.log" | sed -n 's/.*committed=\([0-9]*\).*/\1/p' | tail -n 1)
+var recovered = $(rg -F "source=$source store=$store phase=uncertain delivery request=1 attempt=1 committed=" "$output/replay.log" | sed -n 's/.*committed=\([0-9]*\).*/\1/p' | tail -n 1)
+if (int(committed) <= 0 or int(recovered) < int(committed)) { fail 'replay lost an observed durable prefix' }
+printf '%s\t%s\n' first_pid "$first_pid" replay_pid "$second_pid" store "$store" result REPLAY_CAPTURED >> "$output/capture.tsv"
+sha256sum "$output/stream.log" "$output/replay.log" "$output/stream-memory.txt" "$output/replay-memory.txt" >> "$output/captures.sha256"
+printf '\033[32mPASS capture procedure; independent physical acceptance remains NOT_VERIFIED\033[0m\n'
