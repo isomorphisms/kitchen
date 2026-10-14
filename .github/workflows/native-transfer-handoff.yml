@@ -14,6 +14,11 @@ jobs:
           kitchen_ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fp_ref: 41598f0f795e6b377f42af7f3da82186cb35ec81
           aici_ref: ecd83379d01911b83bf9c38e92561009a47020f3
+      - name: Fixture source-search dependency
+        shell: sh
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
       - name: Captured Android classification fixtures
         shell: sh
         env:
