@@ -22,3 +22,7 @@ Evidence: https://github.com/isomorphisms/kitchen/actions/runs/38562328705
 
 The workflow now supplies the checkout root, matching the locally tested
 interface and the requirements. No procedure guard was weakened.
+
+The subsequent origin-spelling failure and candidate 4 repair are preserved
+in `3-origin-representation.md`. The current workflow runs the expanded
+fourteen-case suite through candidate 4.

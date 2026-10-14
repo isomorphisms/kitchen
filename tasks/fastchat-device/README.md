@@ -1,6 +1,6 @@
 # FastChat device capture candidate
 
-Use candidate `3.grease`; retain the earlier attempts and their failure notes.
+Use candidate `4.grease`; retain the earlier attempts and their failure notes.
 Read requirements.md before using the script. This is a host-side ADB procedure,
 not a phone-side build or dependency installer. Every path is an explicit
 verified absolute input. Existing ADB access, authenticated exact APK bytes,
@@ -17,8 +17,9 @@ conversation data, account settings and system logs are never erased.
 
 The output is a raw CAPTURED receipt with physical_acceptance=NOT_VERIFIED.
 Independent ai-ci admission, true visible-frame timing and physical UI behavior
-are unfinished. `test.grease` passed twelve synthetic procedure cases using the
-real native Grease launcher and actual Cat Food classifier. These fixtures do
+are unfinished. `test.grease` covers fourteen synthetic procedure cases using the
+real native Grease launcher and actual Cat Food classifier, including both
+observed origin URL spellings and a wrong-owner refusal. These fixtures do
 not execute Android, an APK, ICK or a provider account.
 
 The Cat Food `classify-android-target` companion exposes its existing oracle

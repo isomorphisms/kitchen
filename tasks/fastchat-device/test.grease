@@ -22,7 +22,7 @@ proc run_case(name, mode, defect, expected) {
   var observed = 0
   var requested_digest = digest
   if (defect === 'digest') { setvar requested_digest = '0000000000000000000000000000000000000000000000000000000000000000' }
-  if "$runtime" "$here/3.grease" "$mode" "$here/fixtures/adb.grease" synthetic-serial c67 "$catfood" "$[ENV.FC_FIXTURE_APK]" "$requested_digest" "$[ENV.FC_FIXTURE_SOURCE]" "$here/fixtures/aapt2.grease" "$here/fixtures/apksigner.grease" "$runtime" "$output/$name" > "$output/$name.log" 2>&1 {
+  if "$runtime" "$here/4.grease" "$mode" "$here/fixtures/adb.grease" synthetic-serial c67 "$catfood" "$[ENV.FC_FIXTURE_APK]" "$requested_digest" "$[ENV.FC_FIXTURE_SOURCE]" "$here/fixtures/aapt2.grease" "$here/fixtures/apksigner.grease" "$runtime" "$output/$name" > "$output/$name.log" 2>&1 {
     setvar observed = 1
   }
   if (observed !== int(expected)) { cat "$output/$name.log"; echo "FAIL $name"; exit 1 }
@@ -46,5 +46,11 @@ run_case install-failed install install 0
 run_case existing-work exercise running 0
 run_case stale-source exercise source 0
 run_case prefix-loss exercise replay 0
+git clone --quiet --shared -- "$catfood" "$output/catfood-origin-fixture"
+setvar catfood = "$output/catfood-origin-fixture"
+git -C "$catfood" remote set-url origin https://github.com/isomorphisms/catfood
+run_case no-suffix-origin inspect '' 1
+git -C "$catfood" remote set-url origin https://github.com/not-isomorphisms/catfood.git
+run_case wrong-origin inspect origin 0
 if rg -q -g '*.commands' 'uninstall|clear|--allow-downgrade| install -r -d' "$output" { echo 'FAIL destructive or hidden operation'; exit 1 }
 echo 'PASS candidate control-flow fixtures; physical and independent acceptance NOT_RUN'
