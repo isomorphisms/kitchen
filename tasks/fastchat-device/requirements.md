@@ -2,7 +2,8 @@
 
 Execution host: a verified host with existing ADB access to one explicitly named
 MIRO A1 or MIRO C67 instance. No setup, pairing, acquisition or build occurs.
-Candidate `3.grease` follows the retained `1.grease` and `2.grease` attempts.
+Candidate `4.grease` follows the retained `1.grease`, `2.grease` and `3.grease`
+attempts and their failure notes.
 Kitchen owns the procedure. Cat Food owns device classification. ai-ci owns
 independent admission; this candidate emits captures, never physical PASS.
 
@@ -16,6 +17,9 @@ Requirements established before implementation:
 1. Check the selected serial, observed model/product/primary ABI and emulator
    property before effects. Use Cat Food's existing target oracle; unknown or
    conflicting facts must refuse. A1 and C67 never share a receipt.
+   The Cat Food checkout must identify the exact required owner/repository;
+   the two observed HTTPS origin spellings, with and without `.git`, identify
+   that same repository. A different owner must refuse before device operations.
 2. Validate APK bytes, package, ABI, version and stable public test signer before
    install or execution. No compiler, acquisition or on-device build.
 3. `inspect` remains read-only. `install` uses replacement installation only and
