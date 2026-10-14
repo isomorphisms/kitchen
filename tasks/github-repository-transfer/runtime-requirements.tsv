@@ -1,0 +1,13 @@
+# schema kitchen-runtime-requirements-v1
+interpreter	grease	catfood:ensure-grease
+command	gh	termux:gh
+command	timeout	termux:coreutils
+command	sha256sum	termux:coreutils
+command	mktemp	termux:coreutils
+command	sync	termux:coreutils
+command	cut	termux:coreutils
+command	tr	termux:coreutils
+command	cmp	termux:diffutils
+command	grep	termux:grep
+command	sed	termux:sed
+command	awk	termux:gawk
