@@ -1,0 +1,29 @@
+#!/usr/bin/env grease
+if (int($#) !== 5) { echo 'requires JOBICY_ROOT INDEED_ROOT ICU_PREFIX CLIENT_PREFIX EVIDENCE_ROOT' >&2; exit 2 }
+var jobicy = $1
+var indeed = $2
+var icu_prefix = $3
+var prefix = $4
+var evidence = $5
+test "$(git -C "$jobicy" rev-parse HEAD)" = 9c7c676618bb007845d8e54264256fda8c70a04e
+test "$(git -C $[ENV.IDRIC_JSON_ROOT] rev-parse HEAD)" = 16443ffea5123139930d499930bc2da7e065da1f
+git -C "$indeed" rev-parse HEAD
+mkdir -p "$prefix/bin"
+cd -- "$jobicy"
+$[ENV.IDRIC] --build jobicy.ipkg
+$[ENV.IDRIC] --build jobicy-fixture-server.ipkg
+cp -R build/exec/jobicy_app "$prefix/bin/"
+install -m 0755 build/exec/jobicy "$prefix/bin/jobicy"
+cp "$icu_prefix/bin/icu_app/libicu_transport.so" "$prefix/bin/jobicy_app/"
+cd -- "$indeed"
+$[ENV.IDRIC] --build indeed.ipkg
+$[ENV.IDRIC] --build indeed-fixture-server.ipkg
+$[ENV.IDRIC] --build indeed-request-check.ipkg
+cp -R build/exec/indeed_app "$prefix/bin/"
+install -m 0755 build/exec/indeed "$prefix/bin/indeed"
+cp "$icu_prefix/bin/icu_app/libicu_transport.so" "$prefix/bin/indeed_app/"
+cd -- "$evidence"
+env JOBICY_PROGRAM="$prefix/bin/jobicy" $[ENV.GREASE] "$jobicy/checkpoints/jobicy/check.grease"
+env INDEED_PROGRAM="$prefix/bin/indeed" $[ENV.GREASE] "$indeed/checkpoints/indeed/check.grease"
+sha256sum "$prefix/bin/jobicy" "$prefix/bin/jobicy_app/jobicy.so" "$prefix/bin/jobicy_app/libicu_transport.so" "$prefix/bin/indeed" "$prefix/bin/indeed_app/indeed.so" "$prefix/bin/indeed_app/libicu_transport.so" > "$evidence/client-artifact-digests.tsv"
+printf 'live-indeed\tNOT_RUN\treason=no-authorized-credentials\nandroid-a1\tNOT_RUN\nandroid-c67\tNOT_RUN\n'
