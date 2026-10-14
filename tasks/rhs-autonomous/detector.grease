@@ -1,0 +1,18 @@
+#!/usr/bin/env grease
+set -e
+if (int($#) !== 6) { echo 'requires Ithon, engine, candidate, evidence, model and presentation' >&2; exit 2 }
+var ithon = $1
+var engine = $2
+var candidate = $3
+var evidence = $4
+var model = $5
+var presentation = $6
+if (not ithon.startsWith('/') or not engine.startsWith('/') or not candidate.startsWith('/') or not evidence.startsWith('/')) {
+  echo 'detector paths must be absolute' >&2
+  exit 2
+}
+test -x "$ithon"
+test -s "$engine"
+test -s "$candidate/manifest.txt"
+"$ithon" "$engine" selftest
+"$ithon" "$engine" "$candidate" "$evidence" "$model" "$presentation"
