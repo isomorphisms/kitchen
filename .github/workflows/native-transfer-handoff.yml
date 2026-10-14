@@ -30,7 +30,7 @@ jobs:
           ASAN_OPTIONS: detect_leaks=0
         run: |
           "$RUNNER_TEMP/native-grease/bin/grease" "$GITHUB_WORKSPACE/kitchen/tasks/fastchat-device/test.grease" \
-            "$RUNNER_TEMP/native-grease/bin/grease" "$GITHUB_WORKSPACE/catfood/catfood" "$RUNNER_TEMP/fc-m4-fixtures"
+            "$RUNNER_TEMP/native-grease/bin/grease" "$GITHUB_WORKSPACE/catfood" "$RUNNER_TEMP/fc-m4-fixtures"
       - name: Preserve synthetic fixture results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

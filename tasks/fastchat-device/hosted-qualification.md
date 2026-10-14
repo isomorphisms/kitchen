@@ -12,3 +12,13 @@ classification and device-control execution. The missing command was a test
 environment defect. It did not exercise the twelve device-control cases and
 was not physical-device evidence. The candidate procedure remains version 3;
 this repair changes its hosted verification environment, not its behavior.
+
+The next run passed classification but refused the first capture preflight:
+the workflow supplied the Cat Food executable where the procedure requires
+its verified checkout directory. The procedure's executable and Git-origin
+checks rejected that wiring error before any synthetic ADB operation.
+
+Evidence: https://github.com/isomorphisms/kitchen/actions/runs/38562328705
+
+The workflow now supplies the checkout root, matching the locally tested
+interface and the requirements. No procedure guard was weakened.
