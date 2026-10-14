@@ -1,0 +1,18 @@
+#!/usr/bin/env grease
+if (int($#) !== 4) { echo 'requires ICU_ROOT INSTALL_PREFIX AICI_ROOT EVIDENCE_ROOT' >&2; exit 2 }
+var repo = $1
+var prefix = $2
+var aici_root = $3
+var evidence = $4
+var mutant = "$(mktemp -d)"
+mkdir -p "$mutant/bin"
+cp -R "$prefix/bin/." "$mutant/bin/"
+sed 's/MAX_CAPTURE_BYTES (8u/MAX_CAPTURE_BYTES (16u/' "$repo/native/transport.c" > "$mutant/transport.c"
+$[ENV.ICK] -fno-link-libatomic -B/usr/lib/gcc/x86_64-linux-gnu/13/ -static-libgcc -O2 -std=c11 -Wall -Wextra -Werror -fPIC -shared "$mutant/transport.c" -o "$mutant/bin/response-probe_app/libicu_transport.so" -lssl -lcrypto
+try {
+  $[ENV.GREASE] "$aici_root/icu/accept.grease" "$mutant" "$evidence" "$aici_root" capture > "$evidence/native-mutant.stdout" 2> "$evidence/native-mutant.stderr"
+}
+if (_error.code !== 1) { echo 'FAIL actual native limit mutant was not rejected' >&2; exit 1 }
+grep -F 'FAIL limit: expected exit 1' "$evidence/native-mutant.stderr"
+sha256sum "$mutant/transport.c" "$mutant/bin/response-probe_app/libicu_transport.so"
+printf 'native-limit-mutant\tREJECTED\n'
