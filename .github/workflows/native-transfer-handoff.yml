@@ -1,0 +1,13 @@
+name: Native Grease handoff checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  acceptance:
+    uses: isomorphisms/ai-ci/.github/workflows/native-transfer-handoff-reusable.yml@e10c11eab6880764517bb9264a042b43d2d219a9
+    with:
+      catfood_ref: c16dcf0ab5057cbfd9cc7b0fedad587300724873
+      kitchen_ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      fp_ref: 41598f0f795e6b377f42af7f3da82186cb35ec81
+      aici_ref: e10c11eab6880764517bb9264a042b43d2d219a9
