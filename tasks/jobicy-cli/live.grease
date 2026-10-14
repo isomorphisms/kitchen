@@ -1,0 +1,38 @@
+#!/usr/bin/env grease
+if (int($#) !== 2) { echo 'requires INSTALLED_PROGRAM ABSOLUTE_EVIDENCE_PARENT' >&2; exit 2 }
+var program = $1
+var parent = $2
+test -x "$program"
+test -d "$parent"
+var temporary = "$(mktemp -d)"
+cd -- "$temporary"
+try { "$program" search --count 3 --geo usa --format tsv --evidence-dir "$parent" > jobs.tsv 2> search.stderr }
+var result = _error.code
+cat jobs.tsv
+cat search.stderr >&2
+printf 'actual-exit\t%s\n' "$result"
+if (result === 0) {
+  printf 'live-provider\tPASS\noutput\t%s/jobs.tsv\n' "$temporary"
+  var identifier = "$(sed -n '2p' jobs.tsv | cut -f3)"
+  if (identifier !== '') {
+    "$program" status "$identifier" --format jsonl --evidence-dir "$parent" > status.jsonl
+    cat status.jsonl
+    printf 'live-status\tPASS\n'
+  } else {
+    printf 'live-status\tNOT_RUN\treason=verified-empty-first-page\n'
+  }
+  try { "$program" search --count 3 --geo usa --all --max-pages 2 --format jsonl --evidence-dir "$parent" > traversal.jsonl 2> traversal.stderr }
+  var traversal_result = _error.code
+  if (traversal_result !== 0 and traversal_result !== 9) { cat traversal.stderr >&2; exit "$traversal_result" }
+  if (traversal_result === 9) {
+    test ! -s traversal.jsonl
+    grep -F 'page safety bound reached' traversal.stderr > /dev/null
+    printf 'live-cursor-traversal\tPASS\tbound-rejection-exit=9\n'
+  } else {
+    printf 'live-cursor-traversal\tPASS\twindow-exhausted\n'
+  }
+  cat traversal.stderr >&2
+} else {
+  printf 'live-provider\tBLOCKED\noutput\t%s/jobs.tsv\n' "$temporary"
+  exit "$result"
+}
