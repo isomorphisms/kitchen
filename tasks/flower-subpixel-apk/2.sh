@@ -88,13 +88,17 @@ else
     elif [ "$count" -gt 1 ]; then
         blocked 'multiple exact APKs in Cat Food storage; supply FLOWER_APK_PATH'
     else
+        # Consider every currently accessible candidate root. A valid Termux
+        # path might exist but be empty while Android Files exposes another.
         : > "$candidates"
         for directory in "$HOME/storage/downloads" \
                          "$HOME/storage/shared/Download" \
                          /storage/emulated/0/Download /sdcard/Download; do
             [ -d "$directory" ] && [ -r "$directory" ] || continue
             find_in "$directory"
-            break
+            choose_matching
+            [ "$count" -gt 0 ] && break
+            : > "$candidates"
         done
         choose_matching
         if [ "$count" -eq 1 ]; then
