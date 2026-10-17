@@ -15,13 +15,20 @@ blocked() { printf 'FLOWER_APK_BLOCKED: %s\n' "$*" >&2; exit 2; }
 [ "${PREFIX:-}" = /data/data/com.termux/files/usr ] ||
     blocked 'ordinary Termux not confirmed (not adb, Shizuku/rish, or root)'
 case $HOME in /*) ;; *) blocked 'absolute Termux HOME missing' ;; esac
-for required in getprop sha256sum find sort mktemp awk termux-open date; do
+for required in sha256sum find sort mktemp awk termux-open date; do
     command -v "$required" >/dev/null 2>&1 ||
         blocked "required Termux command missing: $required"
 done
-model=$(getprop ro.product.model) || blocked 'device model unavailable'
-abi=$(getprop ro.product.cpu.abi) || blocked 'device primary ABI unavailable'
-device=$(getprop ro.product.device) || blocked 'device product unavailable'
+if command -v getprop >/dev/null 2>&1; then
+    android_prop=getprop
+elif [ -x /system/bin/getprop ]; then
+    android_prop=/system/bin/getprop
+else
+    blocked 'Android getprop unavailable'
+fi
+model=$("$android_prop" ro.product.model) || blocked 'device model unavailable'
+abi=$("$android_prop" ro.product.cpu.abi) || blocked 'device primary ABI unavailable'
+device=$("$android_prop" ro.product.device) || blocked 'device product unavailable'
 case "$model:$abi" in
   'MIRO A1:armeabi-v7a'|'Miro A1:armeabi-v7a')
     [ "$device" != Miro_C67 ] || blocked 'conflicting A1/C67 model and product'
