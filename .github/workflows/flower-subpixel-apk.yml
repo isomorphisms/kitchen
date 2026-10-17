@@ -20,6 +20,8 @@ jobs:
         run: sh -n tasks/flower-subpixel-apk/1.sh && sh -n tests/flower-subpixel-apk.sh
       - name: Exercise positive, ambiguous, wrong-device, wrong-hash, failed-intent mocks
         run: sh tests/flower-subpixel-apk.sh
+      - name: Record exact Kitchen script bytes for phone handoff
+        run: sha256sum tasks/flower-subpixel-apk/1.sh
       - name: Assert production script pins only the two reviewed APK digests
         shell: bash
         run: |
