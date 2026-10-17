@@ -101,6 +101,13 @@ cp "$fixture" "$temp/home/storage/downloads/Another/app-debug.apk"
 fail_without_intent 'ambiguous downloads'
 grep -Fq 'multiple exact APK files' "$err"
 rm -rf -- "$temp/home/storage"
+# Empty observed Downloads alias must not hide the populated second alias.
+mkdir -p "$temp/home/storage/downloads"
+mkdir -p "$temp/home/storage/shared/Download/Real observed"
+cp "$fixture" "$temp/home/storage/shared/Download/Real observed/app-debug.apk"
+assert_pass
+grep -Fq 'ACQUISITION=observed-download' "$out"
+rm -rf -- "$temp/home/storage"
 
 # Browser private-content URI may only be transferred via Android's chooser
 # when the Termux:API add-on is actually provided. No guessed filename.
