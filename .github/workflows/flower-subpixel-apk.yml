@@ -37,6 +37,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fxq 'a1_sha=7256bb53f40392ca35ef5ccf83cf040a633f70c6a97c27cdf303ea3969085a7d' tasks/flower-subpixel-apk/2.sh
-          grep -Fxq 'c67_sha=14ac3dcc7547075b961436471b249a4354d7603f68c6404c5add2c0898a69bab' tasks/flower-subpixel-apk/2.sh
-          ! grep -Eq '(^|[^a-z])(pm install|adb install|rish -c|curl .*-o)' tasks/flower-subpixel-apk/2.sh
+          grep -Fxq 'a1_sha=7256bb53f40392ca35ef5ccf83cf040a633f70c6a97c27cdf303ea3969085a7d' tasks/flower-subpixel-apk/3.sh
+          grep -Fxq 'c67_sha=14ac3dcc7547075b961436471b249a4354d7603f68c6404c5add2c0898a69bab' tasks/flower-subpixel-apk/3.sh
+          ! grep -Eq '(^|[^a-z])(pm install|adb install|rish -c|curl .*-o)' tasks/flower-subpixel-apk/3.sh
