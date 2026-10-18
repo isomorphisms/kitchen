@@ -21,7 +21,7 @@ This is the Kitchen execution recipe for Flexible Pipes' `subpixel-acceptance`.
 
 The registered materials live at `_subpixel/{producer,aici,ick,ike,kitchen}`
 inside the explicit FP checkout; runtime is the native `_subpixel/ysh` binary
-used by the maintained Grease handoff action. Version 2 is current. This layout is
+used by the maintained Grease handoff action. Version 3 is current. This layout is
 owned scratch for this operation, not a user-wide checkout registry. Paths with
 spaces are refused because the independently pinned ai-ci recipe uses flag lists.
 
