@@ -1,0 +1,10 @@
+#!/usr/bin/env grease
+set -o errexit -o nounset -o pipefail
+if (int($#) !== 1) { echo 'requires the exact Grease entrypoint' >&2; exit 2 }
+var program = $1
+setglobal ENV.CGW_ENV_FIXTURE = 'retained'
+"$program" -c 'test "$[ENV.CGW_ENV_FIXTURE]" = retained'
+env CGW_TEMP_FIXTURE=temporary "$program" -c 'test "$[ENV.CGW_TEMP_FIXTURE]" = temporary'
+try { "$program" -c 'test impossible = possible; echo UNEXPECTED' }
+if (_error.code !== 1) { echo 'FAIL Grease did not stop at the failed precondition' >&2; exit 1 }
+printf 'PASS Grease ENV bindings, child environment and failed-precondition stop\n'

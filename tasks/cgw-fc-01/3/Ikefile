@@ -1,0 +1,24 @@
+capture depends on toolchain native coordinator mutants typescript independent
+
+toolchain depends on
+    "$[ENV.CGW_ICK]" -fno-link-libatomic -std=c11 -O2 "$[ENV.CGW_AICI_ROOT]/src/aici.c" -o "$[ENV.CGW_EVIDENCE]/toolchain-check"
+    "$[ENV.CGW_EVIDENCE]/toolchain-check" verify "$[ENV.CGW_AICI_ROOT]/contracts/build-toolchain-v0.contract.tsv" "$[ENV.CGW_EXPORTER_ROOT]"
+    "$[ENV.CGW_EVIDENCE]/toolchain-check" verify "$[ENV.CGW_AICI_ROOT]/contracts/build-toolchain-v0.contract.tsv" "$[ENV.CGW_AICI_ROOT]/native-capture"
+
+native depends on
+    make -C "$[ENV.CGW_EXPORTER_ROOT]/native" production check check-store check-https CC="$[ENV.CGW_ICK]" CFLAGS="$[ENV.CGW_FLAGS]"
+
+coordinator depends on
+    make -C "$[ENV.CGW_EXPORTER_ROOT]/native" check-capture CC="$[ENV.CGW_ICK]" CFLAGS="$[ENV.CGW_FLAGS]"
+
+mutants depends on
+    make -C "$[ENV.CGW_EXPORTER_ROOT]/native" check-capture-mutants CC="$[ENV.CGW_ICK]" CFLAGS="$[ENV.CGW_FLAGS]"
+
+typescript depends on
+    npm --prefix "$[ENV.CGW_EXPORTER_ROOT]" run check
+
+independent depends on
+    "$[ENV.CGW_ICK]" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Werror -pedantic "$[ENV.CGW_AICI_ROOT]/native-capture/check.c" -lcrypto -o "$[ENV.CGW_EVIDENCE]/independent-check"
+    "$[ENV.CGW_EVIDENCE]/independent-check" --source "$[ENV.CGW_SOURCE_ID]" "$[ENV.CGW_EXPORTER_ROOT]/native" "$[ENV.CGW_EXPORTER_ROOT]/native/fixtures/capture" "$[ENV.CGW_EXPORTER_ROOT]/.github/workflows/check.yml"
+    "$[ENV.CGW_EVIDENCE]/independent-check" --source "$[ENV.CGW_SOURCE_ID]" --reject-mutants "$[ENV.CGW_EXPORTER_ROOT]/native" "$[ENV.CGW_EXPORTER_ROOT]/native/fixtures/capture" "$[ENV.CGW_EXPORTER_ROOT]/.github/workflows/check.yml"
+    "$[ENV.CGW_EVIDENCE]/independent-check" --reject-skipped-trigger "$[ENV.CGW_AICI_ROOT]/native-capture/fixtures/skipped-trigger.yml"
