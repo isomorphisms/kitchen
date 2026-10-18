@@ -23,6 +23,8 @@ record. Otherwise it retains the partial rows and exact missing stage names,
 writes an INCOMPLETE finalization receipt, and returns nonzero. Callers must
 record descendants as `NOT_RUN`; the writer must not invent evidence for them.
 Incomplete observations are input for A04's missing-receipt handling, not PASS.
+Complete attempts retain a checked empty `missing.tsv` rather than relying on
+unchecked cleanup to represent complete stage coverage.
 
 The writer must reject changed plans, records with the wrong source or actor,
 duplicate stage records, reused attempt identities, unknown states and malformed

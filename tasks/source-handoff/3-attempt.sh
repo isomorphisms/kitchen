@@ -11,7 +11,7 @@
     for argument in "$@" "$0"; do
         case $argument in *"$tab"*|*"$newline"*) stop arguments 'tabs and newlines in arguments are unsupported' ;; esac
     done
-    for dependency in env git awk dirname mkdir mv cp grep wc sync rm; do
+    for dependency in env git awk dirname mkdir mv cp grep wc sync; do
         command -v "$dependency" >/dev/null 2>&1 || stop dependency "missing $dependency; no installation attempted"
     done
     clean_git() {
@@ -168,15 +168,13 @@
             done < "$attempt/plan.tsv"
             observation_blob=$(blob "$observations") || stop finalize 'cannot identify normalized observations'
             missing_count=$(wc -l < "$missing") || stop finalize 'cannot count missing stages'
+            mv "$missing" "$attempt/missing.tsv" || stop finalize 'cannot retain selected-stage completeness record'
             if [ "$missing_count" -eq 0 ]; then
                 state=COMPLETE
                 mv "$observations" "$attempt/observations.tsv" || stop finalize 'cannot finalize complete observations'
-                rm_target=$missing
             else
                 state=INCOMPLETE
                 mv "$observations" "$attempt/observations.incomplete.tsv" || stop finalize 'cannot retain incomplete observations'
-                mv "$missing" "$attempt/missing.tsv" || stop finalize 'cannot retain missing-stage identities'
-                rm_target=
             fi
             {
                 printf 'schema\tkitchen-k05-finalization-v1\n'
@@ -187,7 +185,6 @@
             } > "$attempt/final.next" || stop finalize 'cannot write finalization receipt'
             mv "$attempt/final.next" "$attempt/final.tsv" || stop finalize 'cannot publish finalization receipt'
             sync "$attempt/final.tsv" 2>/dev/null || stop finalize 'cannot make finalization receipt durable'
-            [ -z "$rm_target" ] || rm -f "$rm_target"
             [ "$state" = COMPLETE ] || stop completeness 'selected stage observation is absent; incomplete evidence retained for A04'
             printf '%s\n' "$attempt/observations.tsv"
             ;;

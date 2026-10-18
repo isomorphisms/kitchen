@@ -52,6 +52,7 @@ record_stage "$attempt" >/dev/null
 finish "$attempt" >/dev/null
 test "$(awk -F '\t' '$1=="state" {print $2}' "$attempt/final.tsv")" = COMPLETE
 test "$(wc -l < "$attempt/observations.tsv")" -eq 5
+test -f "$attempt/missing.tsv" && test ! -s "$attempt/missing.tsv"
 passed 'complete selected stage set finalizes in plan order'
 
 if begin 1 > "$work/output" 2> "$work/error"; then exit 1; fi

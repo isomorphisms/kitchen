@@ -6,12 +6,12 @@ x86_64. Base dependency: Kitchen PR #65 exact head
 
 Candidate Git blob identities before commit:
 
-- writer: `43c7afad0abb57671960832699d80fcfdcff3b35`;
-- requirements: `5d6178b82dc4c92aebc0f9c03f50bec4d55e3bb9`;
+- writer: `5bd0ee85ff5e9e32c64ab430a6dcd46b10df2f5c`;
+- requirements: `f354d8fc17377818027a6970ff7985b8c9919c0f`;
 - A04 mapping: `517214c4b5499c13e397405da5ac6802ed6b6d18`;
 - plan example: `1c0231df420ad19cdda91cf6477ce5ea04b01b33`;
 - failed-observations example: `c69e80c5fe2db95b411b4a5f5bfbed0bac0c1e1f`;
-- independent controls: `3cca46b0885ac4a1cf875fea016522f926cdd718`.
+- independent controls: `dbe5f1d44b409102ea91ae4a3a54f80c5fe4e106`.
 
 `sh tests/source-handoff-attempts.sh` passed all 16 cases. They cover an
 observation existing before effects, a complete run, attempt and stage
