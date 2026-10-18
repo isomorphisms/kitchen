@@ -1,0 +1,22 @@
+capture depends on toolchain native coordinator mutants typescript independent
+
+toolchain depends on
+    "$CGW_ICK" -fno-link-libatomic -std=c11 -O2 "$CGW_AICI_ROOT/src/aici.c" -o "$CGW_EVIDENCE/toolchain-check"
+    "$CGW_EVIDENCE/toolchain-check" verify "$CGW_AICI_ROOT/contracts/build-toolchain-v0.contract.tsv" "$CGW_EXPORTER_ROOT"
+
+native depends on
+    make -C "$CGW_EXPORTER_ROOT/native" production check check-store check-https CC="$CGW_ICK" CFLAGS="$CGW_FLAGS"
+
+coordinator depends on
+    make -C "$CGW_EXPORTER_ROOT/native" check-capture CC="$CGW_ICK" CFLAGS="$CGW_FLAGS"
+
+mutants depends on
+    make -C "$CGW_EXPORTER_ROOT/native" check-capture-mutants CC="$CGW_ICK" CFLAGS="$CGW_FLAGS"
+
+typescript depends on
+    npm --prefix "$CGW_EXPORTER_ROOT" run check
+
+independent depends on
+    "$CGW_ICK" -fno-link-libatomic -std=c11 -O2 -Wall -Wextra -Werror -pedantic "$CGW_AICI_ROOT/native-capture/check.c" -lcrypto -o "$CGW_EVIDENCE/independent-check"
+    "$CGW_EVIDENCE/independent-check" "$CGW_EXPORTER_ROOT/native" "$CGW_EXPORTER_ROOT/native/fixtures/capture" "$CGW_EXPORTER_ROOT/.github/workflows/check.yml"
+    "$CGW_EVIDENCE/independent-check" --reject-skipped-trigger "$CGW_AICI_ROOT/native-capture/fixtures/skipped-trigger.yml"
