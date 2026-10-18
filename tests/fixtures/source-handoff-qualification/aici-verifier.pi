@@ -1,0 +1,197 @@
+"""Synthetic AICI owner used only to exercise Kitchen's verifier boundary."""
+from pathlib import Path
+from builtins import ValueError, dict, int, list
+import hashlib
+import sys
+
+
+def fail(message ∈ str) → None:
+    raise ValueError(message)
+
+
+def digest(path ∈ Path) → str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def field(values ∈ dict[str, str], key ∈ str) → str:
+    value ∈ str ← values.get(key, "")
+    return value
+
+
+def contains_identifier(items ∈ list[str], wanted ∈ str) → bool:
+    for item in items:
+        if item == wanted:
+            return True
+    return False
+
+
+def pairs_and_rows(path ∈ Path, row_name ∈ str, row_width ∈ int) → tuple[dict[str, str], list[list[str]]]:
+    metadata ∈ dict[str, str] ← dict()
+    rows ∈ list[list[str]] ← []
+    text ∈ str ← path.read_text()
+    lines ∈ list[str] ← text.splitlines()
+    for line in lines:
+        fields ∈ list[str] ← line.split("\t")
+        field_count ∈ int ← fields.__len__()
+        first ∈ str ← fields.__getitem__(0)
+        if field_count == 2:
+            key ∈ str ← first
+            if metadata.__contains__(key):
+                fail("duplicate metadata " + key)
+            metadata.__setitem__(key, fields.__getitem__(1))
+        elif field_count == row_width and first == row_name:
+            rows.append(fields)
+        elif row_name == "control" and field_count == 5 and first == "requirement":
+            rows.append(fields)
+        else:
+            fail("corrupt " + row_name + " input")
+    return (metadata, rows)
+
+
+def main() → None:
+    arguments ∈ list[str] ← list(sys.argv)
+    argument_count ∈ int ← arguments.__len__()
+    mode ∈ str ← arguments.__getitem__(1)
+    if argument_count != 6 or mode != "verify":
+        fail("usage: verify SELECTION EVIDENCE CANDIDATE REPORT")
+    selection ∈ Path ← Path(arguments.__getitem__(2))
+    evidence ∈ Path ← Path(arguments.__getitem__(3))
+    candidate ∈ Path ← Path(arguments.__getitem__(4))
+    report ∈ Path ← Path(arguments.__getitem__(5))
+    selection_data ∈ tuple[dict[str, str], list[list[str]]] ← pairs_and_rows(selection, "control", 6)
+    selection_metadata ∈ dict[str, str] ← selection_data.__getitem__(0)
+    selection_rows ∈ list[list[str]] ← selection_data.__getitem__(1)
+    evidence_data ∈ tuple[dict[str, str], list[list[str]]] ← pairs_and_rows(evidence, "result", 11)
+    evidence_metadata ∈ dict[str, str] ← evidence_data.__getitem__(0)
+    evidence_rows ∈ list[list[str]] ← evidence_data.__getitem__(1)
+    if field(selection_metadata, "schema") != "aici-requirement-control-selection-v1":
+        fail("selection schema")
+    if field(evidence_metadata, "schema") != "aici-executed-control-evidence-v1":
+        fail("evidence schema")
+    bound ∈ list[str] ← ["candidate_sha256", "parameters_sha256", "target", "scope"]
+    for key in bound:
+        if field(evidence_metadata, key) != field(selection_metadata, key):
+            fail("evidence binding changed " + key)
+    if digest(candidate) != field(selection_metadata, "candidate_sha256"):
+        fail("tested candidate differs from served candidate")
+    if field(selection_metadata, "source_role") != "copy" or field(selection_metadata, "destination_role") != "move":
+        fail("wrong copy or move role")
+
+    requirement_states ∈ dict[str, str] ← dict()
+    requirement_roles ∈ dict[str, list[str]] ← dict()
+    control_rows ∈ list[list[str]] ← []
+    for row in selection_rows:
+        row_kind ∈ str ← row.__getitem__(0)
+        if row_kind == "requirement":
+            identifier ∈ str ← row.__getitem__(1)
+            state ∈ str ← row.__getitem__(2)
+            reason ∈ str ← row.__getitem__(3)
+            if state != "required" and state != "excluded":
+                fail("requirement state")
+            if state == "excluded" and (reason == "" or reason == "-"):
+                fail("excluded requirement lacks reason")
+            requirement_states.__setitem__(identifier, state)
+            empty_roles ∈ list[str] ← list()
+            requirement_roles.__setitem__(identifier, empty_roles)
+        else:
+            control_rows.append(row)
+    requirement_count ∈ int ← requirement_states.__len__()
+    if requirement_count == 0:
+        fail("no requirements")
+    control_ids ∈ list[str] ← []
+    for control in control_rows:
+        control_id ∈ str ← control.__getitem__(1)
+        requirement_id ∈ str ← control.__getitem__(2)
+        role ∈ str ← control.__getitem__(3)
+        expectation ∈ str ← control.__getitem__(4)
+        if contains_identifier(control_ids, control_id):
+            fail("duplicate control")
+        control_ids.append(control_id)
+        if field(requirement_states, requirement_id) != "required":
+            fail("control has no required requirement")
+        if role != "positive" and role != "negative":
+            fail("control role")
+        if role == "positive" and expectation != "PASS":
+            fail("positive expectation")
+        if role == "negative" and expectation != "REJECTED":
+            fail("negative expectation")
+        fallback_roles ∈ list[str] ← list()
+        roles_for_requirement ∈ list[str] ← requirement_roles.get(requirement_id, fallback_roles)
+        if contains_identifier(roles_for_requirement, role) == False:
+            roles_for_requirement.append(role)
+    for requirement_id in requirement_states:
+        if field(requirement_states, requirement_id) == "required":
+            fallback ∈ list[str] ← list()
+            roles ∈ list[str] ← requirement_roles.get(requirement_id, fallback)
+            role_count ∈ int ← roles.__len__()
+            if role_count != 2 or contains_identifier(roles, "positive") == False or contains_identifier(roles, "negative") == False:
+                fail("required requirement lacks positive or negative control")
+
+    results ∈ dict[str, list[str]] ← dict()
+    for result in evidence_rows:
+        identifier ∈ str ← result.__getitem__(1)
+        if results.__contains__(identifier):
+            fail("duplicate result")
+        results.__setitem__(identifier, result)
+    result_count ∈ int ← results.__len__()
+    control_count ∈ int ← control_ids.__len__()
+    if result_count != control_count:
+        fail("selected controls and executed results differ")
+    for control_id in control_ids:
+        result_present ∈ bool ← results.__contains__(control_id)
+        if result_present == False:
+            fail("selected controls and executed results differ")
+    report_controls ∈ list[str] ← []
+    for control in control_rows:
+        control_id ∈ str ← control.__getitem__(1)
+        requirement_id ∈ str ← control.__getitem__(2)
+        expectation ∈ str ← control.__getitem__(4)
+        evidence_class ∈ str ← control.__getitem__(5)
+        empty_result ∈ list[str] ← list()
+        result ∈ list[str] ← results.get(control_id, empty_result)
+        result_requirement ∈ str ← result.__getitem__(2)
+        result_execution ∈ str ← result.__getitem__(3)
+        result_status ∈ str ← result.__getitem__(4)
+        result_candidate ∈ str ← result.__getitem__(5)
+        result_parameters ∈ str ← result.__getitem__(6)
+        result_target ∈ str ← result.__getitem__(7)
+        result_class ∈ str ← result.__getitem__(8)
+        if result_requirement != requirement_id:
+            fail("result requirement changed")
+        if result_execution != "executed":
+            fail("selected control was not executed")
+        if result_status != expectation:
+            fail("selected control result differs from required observation")
+        if result_candidate != field(selection_metadata, "candidate_sha256"):
+            fail("result candidate changed")
+        if result_parameters != field(selection_metadata, "parameters_sha256"):
+            fail("result parameters changed")
+        if result_target != field(selection_metadata, "target"):
+            fail("result target changed")
+        if result_class != evidence_class:
+            fail("result evidence class changed")
+        evidence_path ∈ Path ← Path(result.__getitem__(9))
+        evidence_absolute ∈ bool ← evidence_path.is_absolute()
+        evidence_is_file ∈ bool ← evidence_path.is_file()
+        if evidence_absolute == False or evidence_is_file == False:
+            fail("result evidence missing")
+        expected_evidence_sha ∈ str ← result.__getitem__(10)
+        if digest(evidence_path) != expected_evidence_sha:
+            fail("result evidence bytes changed")
+        report_controls.append("control\t" + control_id + "\t" + requirement_id + "\t" + expectation + "\t" + evidence_class)
+
+    lines ∈ list[str] ← [
+        "schema\taici-control-qualification-v1",
+        "result\tACCEPTED",
+        "selection_sha256\t" + digest(selection),
+        "evidence_sha256\t" + digest(evidence),
+        "candidate_sha256\t" + digest(candidate),
+        "parameters_sha256\t" + field(selection_metadata, "parameters_sha256"),
+        "target\t" + field(selection_metadata, "target")
+    ]
+    lines.extend(report_controls)
+    joined ∈ str ← "\n".join(lines)
+    report.write_text(joined + "\n")
+
+
+main()

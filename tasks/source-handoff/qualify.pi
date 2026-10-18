@@ -1,0 +1,384 @@
+"""Bind approved requirements and executed controls to final served bytes."""
+from argparse import ArgumentParser
+from pathlib import Path
+from builtins import dict, int, list
+import hashlib
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+def stop(message ∈ str) → None:
+    sys.exit(message)
+
+
+def sha256_bytes(data ∈ bytes) → str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def sha256_file(path ∈ Path) → str:
+    return sha256_bytes(path.read_bytes())
+
+
+def field(values ∈ dict[str, str], key ∈ str) → str:
+    value ∈ str ← values.get(key, "")
+    return value
+
+
+def contains_identifier(items ∈ list[str], wanted ∈ str) → bool:
+    for item in items:
+        if item == wanted:
+            return True
+    return False
+
+
+def same_identifiers(left ∈ list[str], right ∈ list[str]) → bool:
+    left_count ∈ int ← left.__len__()
+    right_count ∈ int ← right.__len__()
+    if left_count != right_count:
+        return False
+    for identifier in left:
+        if contains_identifier(right, identifier) == False:
+            return False
+    return True
+
+
+def exact_sha(value ∈ str, label ∈ str) → None:
+    lowered ∈ str ← value.lower()
+    count ∈ int ← value.__len__()
+    if count != 64 or value != lowered:
+        stop(label + "_SHA256")
+
+
+def exact_revision(value ∈ str, label ∈ str) → None:
+    lowered ∈ str ← value.lower()
+    count ∈ int ← value.__len__()
+    if count != 40 or value != lowered:
+        stop(label + "_REVISION")
+
+
+def absolute_file(value ∈ str, label ∈ str) → Path:
+    path ∈ Path ← Path(value)
+    is_absolute ∈ bool ← path.is_absolute()
+    if is_absolute == False:
+        stop(label + "_PATH_NOT_ABSOLUTE")
+    is_file ∈ bool ← path.is_file()
+    if is_file == False:
+        stop(label + "_MISSING")
+    return path
+
+
+def read_preparation(path ∈ Path) → tuple[dict[str, str], dict[str, list[str]]]:
+    metadata ∈ dict[str, str] ← dict()
+    actions ∈ dict[str, list[str]] ← dict()
+    text ∈ str ← path.read_text()
+    lines ∈ list[str] ← text.splitlines()
+    for line in lines:
+        fields ∈ list[str] ← line.split("\t")
+        field_count ∈ int ← fields.__len__()
+        first ∈ str ← fields.__getitem__(0)
+        if field_count == 2:
+            key ∈ str ← first
+            if metadata.__contains__(key):
+                stop("PREPARATION_DUPLICATE:" + key)
+            metadata.__setitem__(key, fields.__getitem__(1))
+        elif field_count == 5 and first == "action":
+            name ∈ str ← fields.__getitem__(1)
+            if actions.__contains__(name):
+                stop("PREPARATION_DUPLICATE_ACTION:" + name)
+            actions.__setitem__(name, fields[2:])
+        elif field_count == 4 and first == "probe":
+            pass
+        elif field_count == 3 and first == "acceptance":
+            pass
+        else:
+            stop("PREPARATION_CORRUPT")
+    if field(metadata, "schema") != "kitchen-a1-preparation-v1":
+        stop("PREPARATION_SCHEMA")
+    required ∈ list[str] ← [
+        "request_id", "target", "operation", "selected_action",
+        "selected_status", "requirement_projection_sha256"
+    ]
+    for key in required:
+        if field(metadata, key) == "":
+            stop("PREPARATION_MISSING:" + key)
+    if field(metadata, "selected_action") != "source-test":
+        stop("PREPARATION_NOT_SOURCE_HANDOFF")
+    if field(metadata, "selected_status") != "READY":
+        stop("PREPARATION_NOT_READY")
+    empty_action ∈ list[str] ← list()
+    source_action ∈ list[str] ← actions.get("source-test", empty_action)
+    source_action_count ∈ int ← source_action.__len__()
+    source_action_status ∈ str ← ""
+    if source_action_count != 0:
+        source_action_status ← source_action.__getitem__(0)
+    if source_action_count != 3 or source_action_status != "READY":
+        stop("PREPARATION_SOURCE_ACTION_NOT_READY")
+    return (metadata, actions)
+
+
+def read_selection(path ∈ Path) → tuple[dict[str, str], list[list[str]], list[list[str]]]:
+    metadata ∈ dict[str, str] ← dict()
+    requirements ∈ list[list[str]] ← []
+    controls ∈ list[list[str]] ← []
+    requirement_ids ∈ list[str] ← []
+    control_ids ∈ list[str] ← []
+    text ∈ str ← path.read_text()
+    lines ∈ list[str] ← text.splitlines()
+    for line in lines:
+        fields ∈ list[str] ← line.split("\t")
+        count ∈ int ← fields.__len__()
+        kind ∈ str ← fields.__getitem__(0)
+        if count == 2:
+            if metadata.__contains__(kind):
+                stop("SELECTION_DUPLICATE:" + kind)
+            metadata.__setitem__(kind, fields.__getitem__(1))
+        elif count == 5 and kind == "requirement":
+            identifier ∈ str ← fields.__getitem__(1)
+            if identifier == "" or contains_identifier(requirement_ids, identifier):
+                stop("SELECTION_DUPLICATE_REQUIREMENT:" + identifier)
+            requirement_ids.append(identifier)
+            requirements.append(fields)
+        elif count == 6 and kind == "control":
+            identifier ∈ str ← fields.__getitem__(1)
+            if identifier == "" or contains_identifier(control_ids, identifier):
+                stop("SELECTION_DUPLICATE_CONTROL:" + identifier)
+            control_ids.append(identifier)
+            controls.append(fields)
+        else:
+            stop("SELECTION_CORRUPT")
+    if field(metadata, "schema") != "aici-requirement-control-selection-v1":
+        stop("SELECTION_SCHEMA")
+    required ∈ list[str] ← [
+        "request_id", "task", "target", "scope", "parameters_sha256",
+        "candidate_role", "candidate_sha256", "requirement_projection_sha256",
+        "verifier_owner", "verifier_revision", "verifier_sha256",
+        "verifier_interface", "review_status"
+    ]
+    for key in required:
+        if field(metadata, key) == "":
+            stop("SELECTION_MISSING:" + key)
+    if field(metadata, "candidate_role") != "complete-source-handoff-unit":
+        stop("SELECTION_CANDIDATE_ROLE")
+    if field(metadata, "verifier_owner") != "isomorphisms/ai-ci":
+        stop("SELECTION_VERIFIER_OWNER")
+    if field(metadata, "verifier_interface") != "aici-control-qualification-v1":
+        stop("SELECTION_VERIFIER_INTERFACE")
+    if field(metadata, "review_status") != "approved":
+        stop("SELECTION_NOT_APPROVED")
+    exact_sha(field(metadata, "parameters_sha256"), "SELECTION_PARAMETERS")
+    exact_sha(field(metadata, "candidate_sha256"), "SELECTION_CANDIDATE")
+    exact_sha(field(metadata, "requirement_projection_sha256"), "SELECTION_REQUIREMENTS")
+    exact_revision(field(metadata, "verifier_revision"), "SELECTION_VERIFIER")
+    exact_sha(field(metadata, "verifier_sha256"), "SELECTION_VERIFIER")
+    requirement_count ∈ int ← requirements.__len__()
+    if requirement_count == 0:
+        stop("SELECTION_NO_REQUIREMENTS")
+    control_count ∈ int ← controls.__len__()
+    if control_count == 0:
+        stop("SELECTION_NO_CONTROLS")
+    return (metadata, requirements, controls)
+
+
+def read_report(path ∈ Path) → tuple[dict[str, str], list[list[str]]]:
+    metadata ∈ dict[str, str] ← dict()
+    controls ∈ list[list[str]] ← []
+    identifiers ∈ list[str] ← []
+    text ∈ str ← path.read_text()
+    lines ∈ list[str] ← text.splitlines()
+    for line in lines:
+        fields ∈ list[str] ← line.split("\t")
+        count ∈ int ← fields.__len__()
+        first ∈ str ← fields.__getitem__(0)
+        if count == 2:
+            if metadata.__contains__(first):
+                stop("VERIFIER_REPORT_DUPLICATE:" + first)
+            metadata.__setitem__(first, fields.__getitem__(1))
+        elif count == 5 and first == "control":
+            identifier ∈ str ← fields.__getitem__(1)
+            if identifier == "" or contains_identifier(identifiers, identifier):
+                stop("VERIFIER_REPORT_DUPLICATE_CONTROL:" + identifier)
+            identifiers.append(identifier)
+            controls.append(fields)
+        else:
+            stop("VERIFIER_REPORT_CORRUPT")
+    if field(metadata, "schema") != "aici-control-qualification-v1":
+        stop("VERIFIER_REPORT_SCHEMA")
+    return (metadata, controls)
+
+
+def checked_report(
+    ithon ∈ Path,
+    verifier ∈ Path,
+    selection ∈ Path,
+    evidence ∈ Path,
+    candidate ∈ Path,
+    selection_data ∈ tuple[dict[str, str], list[list[str]], list[list[str]]]
+) → bytes:
+    selection_metadata ∈ dict[str, str] ← selection_data.__getitem__(0)
+    selected_controls ∈ list[list[str]] ← selection_data.__getitem__(2)
+    expected_verifier_sha ∈ str ← field(selection_metadata, "verifier_sha256")
+    if sha256_file(verifier) != expected_verifier_sha:
+        stop("VERIFIER_BYTES_CHANGED")
+    temporary_name ∈ str ← tempfile.mkdtemp(prefix="kitchen-control-verifier-")
+    temporary ∈ Path ← Path(temporary_name)
+    try:
+        report ∈ Path ← temporary.joinpath("report.tsv")
+        arguments ∈ list[str] ← [
+            str(ithon), str(verifier), "verify", str(selection),
+            str(evidence), str(candidate), str(report)
+        ]
+        environment ∈ dict[str, str] ← dict(os.environ)
+        child ∈ subprocess.CompletedProcess ← subprocess.run(
+            arguments, capture_output=True, cwd=temporary_name, env=environment
+        )
+        code ∈ int ← child.returncode
+        if code != 0:
+            diagnostic ∈ str ← child.stderr.decode()
+            stop("OWNING_VERIFIER_REJECTED:" + diagnostic)
+        report_is_file ∈ bool ← report.is_file()
+        if report_is_file == False:
+            stop("OWNING_VERIFIER_REPORT_MISSING")
+        report_data ∈ tuple[dict[str, str], list[list[str]]] ← read_report(report)
+        metadata ∈ dict[str, str] ← report_data.__getitem__(0)
+        report_controls ∈ list[list[str]] ← report_data.__getitem__(1)
+        expected ∈ dict[str, str] ← {
+            "result": "ACCEPTED",
+            "selection_sha256": sha256_file(selection),
+            "evidence_sha256": sha256_file(evidence),
+            "candidate_sha256": sha256_file(candidate),
+            "parameters_sha256": field(selection_metadata, "parameters_sha256"),
+            "target": field(selection_metadata, "target")
+        }
+        for key in expected:
+            if field(metadata, key) != field(expected, key):
+                stop("VERIFIER_REPORT_BINDING_CHANGED:" + key)
+        selected_ids ∈ list[str] ← []
+        for control in selected_controls:
+            selected_identifier ∈ str ← control.__getitem__(1)
+            selected_ids.append(selected_identifier)
+        report_ids ∈ list[str] ← []
+        for control in report_controls:
+            report_identifier ∈ str ← control.__getitem__(1)
+            report_ids.append(report_identifier)
+        if same_identifiers(selected_ids, report_ids) == False:
+            stop("VERIFIER_REPORT_CONTROL_SET_CHANGED")
+        return report.read_bytes()
+    finally:
+        shutil.rmtree(temporary_name)
+
+
+def qualified_bytes(
+    preparation ∈ Path,
+    selection ∈ Path,
+    evidence ∈ Path,
+    candidate ∈ Path,
+    verifier ∈ Path,
+    ithon ∈ Path
+) → bytes:
+    preparation_data ∈ tuple[dict[str, str], dict[str, list[str]]] ← read_preparation(preparation)
+    preparation_metadata ∈ dict[str, str] ← preparation_data.__getitem__(0)
+    selection_data ∈ tuple[dict[str, str], list[list[str]], list[list[str]]] ← read_selection(selection)
+    selection_metadata ∈ dict[str, str] ← selection_data.__getitem__(0)
+    if field(selection_metadata, "request_id") != field(preparation_metadata, "request_id"):
+        stop("SELECTION_REQUEST_CHANGED")
+    if field(selection_metadata, "target") != field(preparation_metadata, "target"):
+        stop("SELECTION_TARGET_CHANGED")
+    if field(selection_metadata, "requirement_projection_sha256") != field(preparation_metadata, "requirement_projection_sha256"):
+        stop("SELECTION_REQUIREMENTS_CHANGED")
+    candidate_sha ∈ str ← sha256_file(candidate)
+    if field(selection_metadata, "candidate_sha256") != candidate_sha:
+        stop("SERVED_CANDIDATE_CHANGED")
+    candidate_lines ∈ list[str] ← candidate.read_text().splitlines()
+    candidate_line_count ∈ int ← candidate_lines.__len__()
+    candidate_last ∈ str ← ""
+    if candidate_line_count != 0:
+        candidate_last ← candidate_lines.__getitem__(-1)
+    if candidate_line_count == 0 or candidate_last != "# source-handoff-unit=COMPLETE":
+        stop("SERVED_CANDIDATE_INCOMPLETE")
+    report_bytes ∈ bytes ← checked_report(
+        ithon, verifier, selection, evidence, candidate, selection_data
+    )
+    lines ∈ list[str] ← [
+        "schema\tkitchen-qualified-preparation-v1",
+        "request_id\t" + field(preparation_metadata, "request_id"),
+        "task\t" + field(selection_metadata, "task"),
+        "target\t" + field(selection_metadata, "target"),
+        "scope\t" + field(selection_metadata, "scope"),
+        "candidate_role\tcomplete-source-handoff-unit",
+        "parameters_sha256\t" + field(selection_metadata, "parameters_sha256"),
+        "preparation_sha256\t" + sha256_file(preparation),
+        "requirement_projection_sha256\t" + field(selection_metadata, "requirement_projection_sha256"),
+        "selection_sha256\t" + sha256_file(selection),
+        "executed_evidence_sha256\t" + sha256_file(evidence),
+        "candidate_sha256\t" + candidate_sha,
+        "aici_verifier_revision\t" + field(selection_metadata, "verifier_revision"),
+        "aici_verifier_sha256\t" + field(selection_metadata, "verifier_sha256"),
+        "aici_verifier_report_sha256\t" + sha256_bytes(report_bytes),
+        "handoff_input\tcandidate_sha256\t" + candidate_sha,
+        "handoff_input\trequirement_selection_sha256\t" + sha256_file(selection),
+        "handoff_input\texecuted_controls_sha256\t" + sha256_file(evidence),
+        "evidence_class\treview\tAPPROVED_INPUT",
+        "evidence_class\tsyntax\tSEPARATE_CONTROL",
+        "evidence_class\tfixture\tSEPARATE_CONTROL",
+        "evidence_class\ttarget\tNOT_INFERRED",
+        "evidence_class\tlive\tNOT_INFERRED",
+        "acceptance\tSOURCE_CONTROL_QUALIFIED\tno target runtime delivery or live effect inferred"
+    ]
+    joined ∈ str ← "\n".join(lines)
+    return (joined + "\n").encode()
+
+
+def main() → None:
+    parser ∈ ArgumentParser ← ArgumentParser(description="Bind exact served bytes to AICI-selected controls")
+    parser.add_argument("mode", choices=["prepare", "verify"])
+    parser.add_argument("--preparation", required=True)
+    parser.add_argument("--selection", required=True)
+    parser.add_argument("--evidence", required=True)
+    parser.add_argument("--candidate", required=True)
+    parser.add_argument("--verifier", required=True)
+    parser.add_argument("--ithon", required=True)
+    parser.add_argument("--output", required=True)
+    args ∈ object ← parser.parse_args()
+    mode ∈ str ← args.mode
+    preparation_argument ∈ str ← args.preparation
+    selection_argument ∈ str ← args.selection
+    evidence_argument ∈ str ← args.evidence
+    candidate_argument ∈ str ← args.candidate
+    verifier_argument ∈ str ← args.verifier
+    ithon_argument ∈ str ← args.ithon
+    output_argument ∈ str ← args.output
+    preparation ∈ Path ← absolute_file(preparation_argument, "PREPARATION")
+    selection ∈ Path ← absolute_file(selection_argument, "SELECTION")
+    evidence ∈ Path ← absolute_file(evidence_argument, "EXECUTED_EVIDENCE")
+    candidate ∈ Path ← absolute_file(candidate_argument, "SERVED_CANDIDATE")
+    verifier ∈ Path ← absolute_file(verifier_argument, "OWNING_VERIFIER")
+    ithon ∈ Path ← absolute_file(ithon_argument, "ITHON")
+    output ∈ Path ← Path(output_argument)
+    output_absolute ∈ bool ← output.is_absolute()
+    if output_absolute == False:
+        stop("OUTPUT_PATH_NOT_ABSOLUTE")
+    rendered ∈ bytes ← qualified_bytes(preparation, selection, evidence, candidate, verifier, ithon)
+    if mode == "prepare":
+        output_exists ∈ bool ← output.exists()
+        if output_exists:
+            stop("OUTPUT_ALREADY_EXISTS")
+        output_parent ∈ Path ← output.parent
+        output_parent_exists ∈ bool ← output_parent.is_dir()
+        if output_parent_exists == False:
+            stop("OUTPUT_PARENT_MISSING")
+        output.write_bytes(rendered)
+        print(rendered.decode(), end="")
+    else:
+        output_is_file ∈ bool ← output.is_file()
+        if output_is_file == False:
+            stop("QUALIFIED_PREPARATION_MISSING")
+        observed ∈ bytes ← output.read_bytes()
+        if observed != rendered:
+            stop("QUALIFIED_PREPARATION_INVALIDATED")
+        print("PASS exact served bytes retain approved executed controls")
+
+
+main()
