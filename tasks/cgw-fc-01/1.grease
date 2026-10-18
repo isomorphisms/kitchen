@@ -37,7 +37,7 @@ test "$(sha256sum "$grease" | cut -d ' ' -f 1)" = 7e31cd05b7a9d8fb2a4a9e003a7f3f
 var task = "$kitchen_root/tasks/cgw-fc-01"
 var identity = "$(sha256sum "$task/Ikefile" | cut -d ' ' -f 1)"
 export CGW_EXPORTER_ROOT="$repo" CGW_AICI_ROOT="$aici_root" CGW_ICK="$compiler" CGW_EVIDENCE="$evidence"
-export CGW_FLAGS="-std=c11 -O2 -Wall -Wextra -Werror -pedantic -fno-link-libatomic -DCGW_CAPTURE_SOURCE_IDENTITY=\"$source_id\""
+export CGW_FLAGS="-std=c11 -O2 -Wall -Wextra -Werror -pedantic -fno-link-libatomic -DCGW_CAPTURE_SOURCE_IDENTITY=\\\"$source_id\\\""
 cd -- "$task"
 IKE_RECIPE_RUNNER="$grease" IKE_RECEIPT="$evidence/ike.tsv" IKE_IKEFILE_IDENTITY="sha256:$identity" "$ike_root/ike" capture
 sha256sum "$repo/native/cgw_capture.c" "$repo/native/cgw_json.c" "$aici_root/native-capture/check.c" "$compiler" "$grease" "$ike_root/ike" "$task/Ikefile" "$evidence/independent-check"
