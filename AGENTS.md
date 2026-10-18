@@ -67,7 +67,7 @@ of a guessed mutation.
 ## Producer-to-human source handoffs
 
 For the existing pre-Grease POSIX source-test boundary, use
-`tasks/source-handoff/1.sh` and a reviewed, digest-bound task contract before
+`tasks/source-handoff/2.sh` and a reviewed, digest-bound task contract before
 emitting a command. Read its requirements and README. A source pin in job prose
 is not materialization evidence. Producer refresh and consumer execution are
 separate phases. Do not substitute a baseline scope for a blocked feature scope.
