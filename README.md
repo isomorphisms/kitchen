@@ -32,3 +32,7 @@ Read [the IB handoff incident](incidents/2026-10-04-ib-unmaterialized-handoff.md
 The [versioned IB baseline task](tasks/ib-durable-store/README.md) preserves existing checkouts, verifies source and blob identities, and keeps the passing old baseline separate from the unavailable E2 repair. Its regression covers failed context discovery, repeated execution, and login-shell preservation. Cat Food owns verified checkout lookup and the dated phone observation.
 
 New source-test handoffs use the shared [producer gate](tasks/source-handoff/README.md). It verifies fresh source materialization before emitting a digest-bound command. Consumer execution remains read-only and acceptance stays scope-specific.
+
+The [A1 material-bound preparation](tasks/android-diagnostic/README.md) consumes
+exact Cat Food profile requests and AICI corrections before selecting the
+source-test, freshness, diagnostic, or export-copy action.
