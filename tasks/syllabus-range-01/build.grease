@@ -1,0 +1,44 @@
+#!/usr/bin/env grease
+if (int($#) !== 4) { echo 'requires ICU_ROOT INSTALL_PREFIX AICI_ROOT EVIDENCE_ROOT' >&2; exit 2 }
+var repo = $1
+var prefix = $2
+var aici_root = $3
+var evidence = $4
+test "$(uname -sm)" = 'Linux x86_64'
+test "$(git -C $[ENV.IDRIC_ROOT] rev-parse HEAD)" = 2734ac5a86610eddfab73b1644d72b4ac85a65ee
+test "$(git -C $[ENV.IDRIC_NET_ROOT] rev-parse HEAD)" = 3d71cf1b942881a39b1f3a2ddc8d71c73637d57f
+test "$(git -C $repo rev-parse HEAD)" = 2f46fb326b6a75c50fd420d3aca4a7e7d59cd33a
+test "$(git -C $aici_root rev-parse HEAD)" = b13b5f14b239a0f73e25434a1073bdecd4dfb26e
+test -z "$(git -C $repo status --porcelain --untracked-files=no)"
+test -z "$(git -C $[ENV.IDRIC_NET_ROOT] status --porcelain --untracked-files=no)"
+test "$(git -C $[ENV.ICK_SOURCE_ROOT] rev-parse HEAD)" = c61e448251744a2f40ad743ebef1a027bdcd2f9d
+mkdir -p "$evidence"
+cd -- $[ENV.IDRIC_NET_ROOT]
+$[ENV.IDRIC] --install idric-net.ipkg
+cd -- "$repo"
+$[ENV.IDRIC] --install icu-response.ipkg
+$[ENV.IDRIC] --build response-probe.ipkg
+$[ENV.IDRIC] --build icu.ipkg
+$[ENV.IDRIC] --build protocol-version-probe.ipkg
+$[ENV.IDRIC] -p idric_net tests/HttpTests.idric -o icu-http-tests
+./build/exec/icu-http-tests
+var flags = :| -fno-link-libatomic -B/usr/lib/gcc/x86_64-linux-gnu/13/ -static-libgcc -O2 -std=c11 -Wall -Wextra -Werror |
+$[ENV.ICK] @flags -fPIC -shared native/transport.c -o libicu_transport.so -lssl -lcrypto
+$[ENV.ICK] @flags tests/RedirectPolicyTests.c -o "$evidence/native-policy" -lssl -lcrypto
+"$evidence/native-policy"
+mkdir -p "$prefix/bin"
+for name in icu response-probe protocol-version-probe {
+  cp -R "build/exec/$[name]_app" "$prefix/bin/"
+  install -m 0755 "build/exec/$name" "$prefix/bin/$name"
+  cp libicu_transport.so "$prefix/bin/$[name]_app/"
+}
+$[ENV.ICK] @flags "$aici_root/icu/fixture.c" -o "$evidence/fixture" -lssl -lcrypto
+$[ENV.ICK] @flags "$aici_root/src/aici.c" -o "$evidence/aici"
+sha256sum native/transport.c src/Response.idric > "$evidence/source-digests.tsv"
+sha256sum "$prefix/bin/icu" "$prefix/bin/icu_app/icu.so" "$prefix/bin/response-probe" "$prefix/bin/response-probe_app/response-probe.so" "$prefix/bin/icu_app/libicu_transport.so" "$evidence/fixture" "$evidence/aici" > "$evidence/artifact-digests.tsv"
+git -C "$repo" rev-parse HEAD
+git -C "$aici_root" rev-parse HEAD
+sha256sum "$aici_root/icu/fixture.c" "$aici_root/icu/accept.grease" "$aici_root/icu/behavior.contract.tsv" "$aici_root/icu/capture.expected.tsv" "$0"
+git -C "$repo" diff --stat
+$[ENV.IDRIC] --version
+$[ENV.ICK] --version
