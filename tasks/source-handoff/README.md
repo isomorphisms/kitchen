@@ -67,6 +67,14 @@ Reusable job rules:
 5. Record execution, historical human reports, implementation acceptance and
    follower acceptance separately. A missing receipt stays missing.
 
+For the maintained A1 diagnostic preparation, the Cat Food pre-command request
+binds this version-2 adapter's exact revision and SHA-256. Kitchen's
+`tasks/android-diagnostic/prepare.pi` consumes that request with the current
+profile, AICI correction projection, repaired A1 mirror, and task-local material
+facts. A `source-test READY` result is the material-context admission to this
+adapter; a changed relevant input invalidates the old preparation receipt.
+Version 2 remains unchanged and retains its temporary-only POSIX boundary.
+
 Regression: `tests/source-handoff.sh` uses real disposable Git publishers and
 checkouts, without a fake Git program. All identities vary per run. Its 36 cases
 include resource-fault wrappers around individual host utilities; those wrappers

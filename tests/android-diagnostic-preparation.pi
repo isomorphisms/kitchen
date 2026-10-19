@@ -1,0 +1,324 @@
+"""Regression controls for material-bound Kitchen preparation."""
+from argparse import ArgumentParser
+from pathlib import Path
+from builtins import ValueError, dict, int, list
+import hashlib
+import os
+import shutil
+import subprocess
+import tempfile
+import sys
+
+def fail(message ∈ str) → None:
+    raise ValueError(message)
+
+def sha256_bytes(data ∈ bytes) → str:
+    return hashlib.sha256(data).hexdigest()
+
+def sha256_file(path ∈ Path) → str:
+    return sha256_bytes(path.read_bytes())
+
+def write_lines(path ∈ Path, lines ∈ list[str]) → None:
+    joined ∈ str ← "\n".join(lines)
+    path.write_text(joined + "\n")
+
+def profile(path ∈ Path, service ∈ str, operation ∈ str) → None:
+    facts ∈ list[str] ← [
+        "fact\tdevice_class\tphone\tmodel\tknown\tandroid/devices/miro-a1.md\ta112781be92e49cbf9e749ea7fad835f1d64dbdcbef0cbba649d5b262bc30fde\t",
+        "fact\tfirmware_fingerprint\tMIRO/A1/current\tfirmware\tcurrent\tinventory.tsv\t1111111111111111111111111111111111111111111111111111111111111111\t2026-10-18T12:00:00Z",
+        "fact\tmodel_name\tMIRO A1\tmodel\tknown\tandroid/devices/miro-a1.md\ta112781be92e49cbf9e749ea7fad835f1d64dbdcbef0cbba649d5b262bc30fde\t",
+        "fact\tprimary_abi\tarmeabi-v7a\tmodel\tknown\tandroid/devices/miro-a1.md\ta112781be92e49cbf9e749ea7fad835f1d64dbdcbef0cbba649d5b262bc30fde\t",
+        "fact\tshizuku_readiness\t" + service + "\tsession\tcurrent\tobservations.tsv\t2222222222222222222222222222222222222222222222222222222222222222\t2026-10-18T12:00:00Z",
+        "fact\ttarget\tphone\tmodel\tknown\tandroid/devices/miro-a1.md\ta112781be92e49cbf9e749ea7fad835f1d64dbdcbef0cbba649d5b262bc30fde\t"
+    ]
+    joined_facts ∈ str ← "\n".join(facts)
+    material_text ∈ str ← joined_facts + "\n"
+    material_sha ∈ str ← sha256_bytes(material_text.encode())
+    lines ∈ list[str] ← [
+        "meta\tschema\tcatfood-android-profile-projection-v2",
+        "meta\tresolver_version\tcatfood-profile-resolver-v2",
+        "meta\tcanonical_model\tmiro-a1",
+        "meta\ttarget\tphone",
+        "meta\tdevice_instance\ta1-one",
+        "meta\toperation\t" + operation,
+        "meta\tavailability\tBRANCH_ONLY",
+        "meta\tprofile_definition_sha256\t3333333333333333333333333333333333333333333333333333333333333333",
+        "meta\talias_map_sha256\t4444444444444444444444444444444444444444444444444444444444444444",
+        "meta\trequired_fields_sha256\t5555555555555555555555555555555555555555555555555555555555555555",
+        "meta\tprofile_material_sha256\t" + material_sha
+    ]
+    lines.extend(facts)
+    write_lines(path, lines)
+
+def request(path ∈ Path, profile_path ∈ Path, requirements_path ∈ Path, operation ∈ str) → None:
+    parsed_profile ∈ dict[str, str] ← dict()
+    profile_text ∈ str ← profile_path.read_text()
+    profile_lines ∈ list[str] ← profile_text.splitlines()
+    for line in profile_lines:
+        fields ∈ list[str] ← line.split("\t")
+        field_count ∈ int ← fields.__len__()
+        if field_count == 3:
+            kind ∈ str ← fields.__getitem__(0)
+            if kind == "meta":
+                key ∈ str ← fields.__getitem__(1)
+                parsed_profile.__setitem__(key, fields.__getitem__(2))
+    profile_material ∈ str ← parsed_profile.get("profile_material_sha256", "")
+    write_lines(path, [
+        "schema\tcatfood-android-profile-request-v1",
+        "request_id\ta1-c67",
+        "consumer\tkitchen-cf-a2-s5",
+        "program\tgrease",
+        "canonical_model\tmiro-a1",
+        "target\tphone",
+        "device_instance\ta1-one",
+        "operation\t" + operation,
+        "profile_projection_sha256\t" + sha256_file(profile_path),
+        "profile_material_sha256\t" + profile_material,
+        "requirement_projection_sha256\t" + sha256_file(requirements_path),
+        "approved_obligations_sha256\t6666666666666666666666666666666666666666666666666666666666666666",
+        "approved_obligations_candidate_head\t7f4a3707a63812af1039ad80aea8ad7e86983670",
+        "approved_obligations_interface_sha256\tb079f6326ef018e2dce46105f055cc3a237bbb4df42d85b0e550228adacf976d",
+        "approved_package\tgrease",
+        "approved_package_obligation_sha256\t7777777777777777777777777777777777777777777777777777777777777777",
+        "aici_requirement_revision\tcdf6f09dda2828e4d463dab202d66175397dbbd4",
+        "kitchen_source_handoff_revision\tba7f651e89ae25e831613c8c3fee2f15f73baa54",
+        "kitchen_source_handoff_sha256\tcc79e130ddd4a79e0a1d5b2c7be37e8daf68e7aee5452c5616f538aa137833d9",
+        "kitchen_contract_schema\tsource-handoff-v1",
+        "qualified_ithon_revision\td6e83969f82512e920fb17b44326cb54f31d015c",
+        "next_phase\tcommand-preparation"
+    ])
+
+def material(
+    path ∈ Path,
+    evidence ∈ Path,
+    selected ∈ str,
+    host ∈ str,
+    export_category ∈ str,
+    export_state ∈ str,
+    export_path ∈ str,
+    export_present ∈ str,
+    completed ∈ str,
+    cause ∈ str
+) → None:
+    evidence_sha ∈ str ← sha256_file(evidence)
+    export_evidence ∈ str ← "-"
+    export_evidence_sha ∈ str ← "-"
+    if export_state == "current" and (export_category == "observed" or export_category == "derived"):
+        export_evidence ← str(evidence)
+        export_evidence_sha ← evidence_sha
+    cause_category ∈ str ← "unknown"
+    cause_state ∈ str ← "unknown"
+    if cause != "none":
+        cause_category ← "constraint"
+        cause_state ← "current"
+    write_lines(path, [
+        "# kitchen-a1-preparation-material-v1",
+        "meta\tselected_action\t" + selected,
+        "fact\thost\tobserved\tcurrent\t" + host + "\t" + str(evidence) + "\t" + evidence_sha + "\tobs-host-1",
+        "fact\tsource_checkout_path\tobserved\tcurrent\t/data/data/com.termux/files/home/src/IB\t" + str(evidence) + "\t" + evidence_sha + "\tobs-source-1",
+        "fact\tsource_checkout_revision\tobserved\tcurrent\tf1f22778fb66f7219c13ba864c13b03be10cfea8\t" + str(evidence) + "\t" + evidence_sha + "\tobs-source-1",
+        "fact\tshizuku_export_path\t" + export_category + "\t" + export_state + "\t" + export_path + "\t" + export_evidence + "\t" + export_evidence_sha + "\tobs-export-1",
+        "fact\tshizuku_export_present\tobserved\tcurrent\t" + export_present + "\t" + str(evidence) + "\t" + evidence_sha + "\tobs-export-1",
+        "fact\texport_copy_completed\tobserved\tcurrent\t" + completed + "\t" + str(evidence) + "\t" + evidence_sha + "\tobs-copy-1",
+        "fact\texport_copy_cause\t" + cause_category + "\t" + cause_state + "\t" + cause + "\t-\t-\tintent-1"
+    ])
+
+def command(
+    ithon ∈ str,
+    engine ∈ Path,
+    mode ∈ str,
+    request_path ∈ Path,
+    profile_path ∈ Path,
+    requirements ∈ Path,
+    material_path ∈ Path,
+    mirror ∈ Path,
+    source_handoff ∈ Path,
+    output ∈ Path
+) → list[str]:
+    return [
+        ithon, str(engine), mode,
+        "--profile-request", str(request_path),
+        "--profile", str(profile_path),
+        "--requirements", str(requirements),
+        "--material", str(material_path),
+        "--mirror", str(mirror),
+        "--source-handoff", str(source_handoff),
+        "--output", str(output)
+    ]
+
+def invoke(argv ∈ list[str], cwd ∈ Path) → subprocess.CompletedProcess:
+    environment ∈ dict[str, str] ← dict(os.environ)
+    return subprocess.run(argv, capture_output=True, cwd=str(cwd), env=environment)
+
+def expect_pass(argv ∈ list[str], cwd ∈ Path, label ∈ str) → subprocess.CompletedProcess:
+    child ∈ subprocess.CompletedProcess ← invoke(argv, cwd)
+    code ∈ int ← child.returncode
+    if code != 0:
+        stderr ∈ str ← child.stderr.decode()
+        fail(label + " unexpectedly failed: " + stderr)
+    return child
+
+def expect_reject(argv ∈ list[str], cwd ∈ Path, diagnostic ∈ str, label ∈ str) → None:
+    child ∈ subprocess.CompletedProcess ← invoke(argv, cwd)
+    code ∈ int ← child.returncode
+    if code == 0:
+        fail(label + " unexpectedly passed")
+    stderr ∈ str ← child.stderr.decode()
+    diagnostic_index ∈ int ← stderr.find(diagnostic)
+    if diagnostic_index < 0:
+        fail(label + " wrong diagnostic: " + stderr)
+
+def require_text(path ∈ Path, expected ∈ str, label ∈ str) → None:
+    text ∈ str ← path.read_text()
+    expected_index ∈ int ← text.find(expected)
+    if expected_index < 0:
+        fail(label + " missing: " + expected)
+
+def main() → None:
+    parser ∈ ArgumentParser ← ArgumentParser()
+    parser.add_argument("--ithon", required=True)
+    args ∈ object ← parser.parse_args()
+    ithon ∈ str ← args.ithon
+    source_name ∈ str ← sys._getframe().f_code.co_filename
+    root ∈ Path ← Path(source_name).resolve().parents.__getitem__(1)
+    engine ∈ Path ← root.joinpath("tasks/android-diagnostic/prepare.pi")
+    mirror ∈ Path ← root.joinpath("systems/miro-a1-termux.md")
+    corrupt_mirror ∈ Path ← root.joinpath("fixtures/miro-a1-termux-corrupt.md")
+    source_handoff ∈ Path ← root.joinpath("tasks/source-handoff/2.sh")
+    requirements ∈ Path ← root.joinpath("fixtures/android-diagnostic/a1-grease-requirements.tsv")
+    temporary_name ∈ str ← tempfile.mkdtemp(prefix="kitchen material ")
+    temporary ∈ Path ← Path(temporary_name)
+    unrelated ∈ Path ← temporary.joinpath("unrelated whitespace")
+    unrelated.mkdir()
+    checked ∈ int ← 0
+    try:
+        evidence ∈ Path ← temporary.joinpath("evidence.txt")
+        evidence.write_text("synthetic current observation bytes\n")
+        good_profile ∈ Path ← temporary.joinpath("good-profile.tsv")
+        good_request ∈ Path ← temporary.joinpath("good-request.tsv")
+        profile(good_profile, "working", "diagnostic-shizuku")
+        request(good_request, good_profile, requirements, "diagnostic-shizuku")
+
+        good_material ∈ Path ← temporary.joinpath("good-material.tsv")
+        good_output ∈ Path ← temporary.joinpath("good-output.tsv")
+        material(good_material, evidence, "diagnostic-capture", "miro-a1-termux", "observed", "current", "/data/data/com.termux/files/home/opt/Shizuku/rish_shizuku.dex", "yes", "no", "none")
+        good_command ∈ list[str] ← command(ithon, engine, "prepare", good_request, good_profile, requirements, good_material, mirror, source_handoff, good_output)
+        expect_pass(good_command, unrelated, "valid exact host")
+        require_text(good_output, "selected_status\tREADY", "valid exact host")
+        verify_good ∈ list[str] ← command(ithon, engine, "verify", good_request, good_profile, requirements, good_material, mirror, source_handoff, good_output)
+        expect_pass(verify_good, unrelated, "unchanged verification")
+        checked ← checked + 2
+
+        equal_output ∈ Path ← temporary.joinpath("equal-output.tsv")
+        equal_command ∈ list[str] ← command(ithon, engine, "prepare", good_request, good_profile, requirements, good_material, mirror, source_handoff, equal_output)
+        expect_pass(equal_command, unrelated, "equal material replay")
+        good_bytes ∈ bytes ← good_output.read_bytes()
+        equal_bytes ∈ bytes ← equal_output.read_bytes()
+        if good_bytes != equal_bytes:
+            fail("equal material changed preparation")
+        checked ← checked + 1
+
+        alternate_material ∈ Path ← temporary.joinpath("alternate-material.tsv")
+        alternate_output ∈ Path ← temporary.joinpath("alternate-output.tsv")
+        material(alternate_material, evidence, "diagnostic-capture", "miro-a1-termux", "observed", "current", "/data/data/com.termux/files/home/storage/shared/Shizuku/rish_shizuku.dex", "yes", "no", "none")
+        alternate_command ∈ list[str] ← command(ithon, engine, "prepare", good_request, good_profile, requirements, alternate_material, mirror, source_handoff, alternate_output)
+        expect_pass(alternate_command, unrelated, "alternate verified export")
+        require_text(alternate_output, "selected_status\tREADY", "alternate verified export")
+        checked ← checked + 1
+
+        wrong_host_material ∈ Path ← temporary.joinpath("wrong-host.tsv")
+        wrong_host_output ∈ Path ← temporary.joinpath("wrong-host-output.tsv")
+        material(wrong_host_material, evidence, "diagnostic-capture", "sdf-netbsd", "observed", "current", "/tmp/rish.dex", "yes", "no", "none")
+        wrong_host_command ∈ list[str] ← command(ithon, engine, "prepare", good_request, good_profile, requirements, wrong_host_material, mirror, source_handoff, wrong_host_output)
+        expect_pass(wrong_host_command, unrelated, "wrong host receipt")
+        require_text(wrong_host_output, "selected_reason\tTARGET_HOST_MISMATCH", "wrong host")
+        checked ← checked + 1
+
+        invented_material ∈ Path ← temporary.joinpath("invented-path.tsv")
+        invented_output ∈ Path ← temporary.joinpath("invented-output.tsv")
+        material(invented_material, evidence, "diagnostic-capture", "miro-a1-termux", "preference", "current", "/invented/rish.dex", "yes", "no", "none")
+        invented_command ∈ list[str] ← command(ithon, engine, "prepare", good_request, good_profile, requirements, invented_material, mirror, source_handoff, invented_output)
+        expect_pass(invented_command, unrelated, "invented path receipt")
+        require_text(invented_output, "selected_reason\tSHIZUKU_EXPORT_UNSUPPORTED", "invented path")
+        checked ← checked + 1
+
+        missing_material ∈ Path ← temporary.joinpath("missing-export.tsv")
+        missing_output ∈ Path ← temporary.joinpath("missing-output.tsv")
+        material(missing_material, evidence, "diagnostic-capture", "miro-a1-termux", "observed", "current", "/data/data/com.termux/files/home/storage/shared/Shizuku/rish_shizuku.dex", "no", "no", "none")
+        missing_command ∈ list[str] ← command(ithon, engine, "prepare", good_request, good_profile, requirements, missing_material, mirror, source_handoff, missing_output)
+        expect_pass(missing_command, unrelated, "missing export receipt")
+        require_text(missing_output, "probe\tPROBE_SHIZUKU_EXPORT\tread-only", "missing export probe")
+        checked ← checked + 1
+
+        stopped_profile ∈ Path ← temporary.joinpath("stopped-profile.tsv")
+        stopped_request ∈ Path ← temporary.joinpath("stopped-request.tsv")
+        stopped_output ∈ Path ← temporary.joinpath("stopped-output.tsv")
+        profile(stopped_profile, "stopped", "diagnostic-shizuku")
+        request(stopped_request, stopped_profile, requirements, "diagnostic-shizuku")
+        stopped_command ∈ list[str] ← command(ithon, engine, "prepare", stopped_request, stopped_profile, requirements, good_material, mirror, source_handoff, stopped_output)
+        expect_pass(stopped_command, unrelated, "stopped service receipt")
+        require_text(stopped_output, "selected_reason\tSHIZUKU_SERVICE_NOT_READY", "stopped service")
+        require_text(stopped_output, "action\tsource-test\tREADY", "unrelated source test")
+        checked ← checked + 1
+
+        freshness_material ∈ Path ← temporary.joinpath("freshness.tsv")
+        freshness_output ∈ Path ← temporary.joinpath("freshness-output.tsv")
+        material(freshness_material, evidence, "freshness-check", "miro-a1-termux", "unknown", "unknown", "UNKNOWN", "no", "yes", "none")
+        freshness_command ∈ list[str] ← command(ithon, engine, "prepare", stopped_request, stopped_profile, requirements, freshness_material, mirror, source_handoff, freshness_output)
+        expect_pass(freshness_command, unrelated, "repeat freshness")
+        require_text(freshness_output, "selected_reason\tREAD_ONLY_REPEAT_ALLOWED", "repeat freshness")
+        freshness_repeat_output ∈ Path ← temporary.joinpath("freshness-repeat-output.tsv")
+        freshness_repeat_command ∈ list[str] ← command(ithon, engine, "prepare", stopped_request, stopped_profile, requirements, freshness_material, mirror, source_handoff, freshness_repeat_output)
+        expect_pass(freshness_repeat_command, unrelated, "second repeat freshness")
+        freshness_bytes ∈ bytes ← freshness_output.read_bytes()
+        freshness_repeat_bytes ∈ bytes ← freshness_repeat_output.read_bytes()
+        if freshness_bytes != freshness_repeat_bytes:
+            fail("repeated freshness changed preparation")
+        checked ← checked + 2
+
+        completed_material ∈ Path ← temporary.joinpath("completed-copy.tsv")
+        completed_output ∈ Path ← temporary.joinpath("completed-output.tsv")
+        material(completed_material, evidence, "export-copy", "miro-a1-termux", "observed", "current", "/data/data/com.termux/files/home/storage/shared/Shizuku/rish_shizuku.dex", "yes", "yes", "none")
+        completed_command ∈ list[str] ← command(ithon, engine, "prepare", good_request, good_profile, requirements, completed_material, mirror, source_handoff, completed_output)
+        expect_pass(completed_command, unrelated, "completed mutation receipt")
+        require_text(completed_output, "selected_reason\tCOMPLETED_MUTATION_REPLAY", "completed mutation")
+        checked ← checked + 1
+
+        corrupt_command ∈ list[str] ← command(ithon, engine, "verify", good_request, good_profile, requirements, good_material, corrupt_mirror, source_handoff, good_output)
+        expect_reject(corrupt_command, unrelated, "SYSTEM_MIRROR_CORRUPT", "corrupt mirror")
+        checked ← checked + 1
+
+        changed_profile ∈ Path ← temporary.joinpath("changed-profile.tsv")
+        changed_request ∈ Path ← temporary.joinpath("changed-request.tsv")
+        profile(changed_profile, "working", "diagnostic-base")
+        request(changed_request, changed_profile, requirements, "diagnostic-base")
+        changed_verify ∈ list[str] ← command(ithon, engine, "verify", changed_request, changed_profile, requirements, good_material, mirror, source_handoff, good_output)
+        expect_reject(changed_verify, unrelated, "PREPARATION_RECEIPT_INVALIDATED", "changed profile")
+        checked ← checked + 1
+
+        stale_requirements ∈ Path ← temporary.joinpath("stale-requirements.tsv")
+        stale_lines ∈ list[str] ← []
+        requirements_text ∈ str ← requirements.read_text()
+        requirement_lines ∈ list[str] ← requirements_text.splitlines()
+        for requirement_line in requirement_lines:
+            correction_index ∈ int ← requirement_line.find("req-grease-non-cxx")
+            if correction_index < 0:
+                stale_lines.append(requirement_line)
+        write_lines(stale_requirements, stale_lines)
+        stale_request ∈ Path ← temporary.joinpath("stale-request.tsv")
+        request(stale_request, good_profile, stale_requirements, "diagnostic-shizuku")
+        stale_output ∈ Path ← temporary.joinpath("stale-output.tsv")
+        stale_command ∈ list[str] ← command(ithon, engine, "prepare", stale_request, good_profile, stale_requirements, good_material, mirror, source_handoff, stale_output)
+        expect_reject(stale_command, unrelated, "AICI_CORRECTION_MISSING", "stale correction")
+        checked ← checked + 1
+
+        changed_material ∈ Path ← temporary.joinpath("changed-material.tsv")
+        material(changed_material, evidence, "diagnostic-capture", "miro-a1-termux", "observed", "current", "/different/verified/rish.dex", "yes", "no", "none")
+        changed_material_verify ∈ list[str] ← command(ithon, engine, "verify", good_request, good_profile, requirements, changed_material, mirror, source_handoff, good_output)
+        expect_reject(changed_material_verify, unrelated, "PREPARATION_RECEIPT_INVALIDATED", "changed material")
+        checked ← checked + 1
+    finally:
+        shutil.rmtree(temporary_name)
+    print("PASS", checked, "material-bound preparation controls")
+
+main()

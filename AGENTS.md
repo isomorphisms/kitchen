@@ -74,6 +74,12 @@ separate phases. Do not substitute a baseline scope for a blocked feature scope.
 The emitted child invocation is conditional so even a parent using errexit
 survives failure. Test the exact emitted text twice from outside the repository.
 
+For the A1 preparation covered by `tasks/android-diagnostic/prepare.pi`, first
+bind the exact Cat Food request/profile, accepted AICI projection, task-local
+material observations, repaired system mirror, and source-handoff version 2.
+Use its selected action status; an old source-handoff candidate does not remain
+admitted after a relevant profile, correction, mirror, or material change.
+
 K05's separately versioned `tasks/source-handoff/3-attempt.sh` is a candidate
 observation writer, not yet the maintained caller. It accepts an independently
 supplied stage plan, creates an immutable attempt before execution, and emits
