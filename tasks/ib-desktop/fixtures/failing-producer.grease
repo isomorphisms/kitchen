@@ -1,0 +1,8 @@
+#!/usr/bin/env grease
+# Adversarial producer fixture only; never a replacement compiler.
+if ($1 === '--version') {
+  echo 'fixture: producer status rejection'
+  exit 0
+}
+echo True
+exit 7
