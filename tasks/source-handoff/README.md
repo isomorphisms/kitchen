@@ -73,3 +73,18 @@ include resource-fault wrappers around individual host utilities; those wrappers
 do not replace Git or the source-test candidate. The deliberate
 success-printing fixture tests wrapper selection only, never IB semantics. The
 separate audit also executes IB's real pinned baseline twice.
+
+## K05 stage observations candidate
+
+[`3-attempt.sh`](3-attempt.sh) is a separately versioned candidate writer for
+immutable required-stage attempts around this existing POSIX seam. It creates
+the attempt record before target execution, binds an independently supplied
+stage plan and material identities, and preserves raw A04-compatible rows
+without computing a Kitchen verdict. Its requirements and exact mapping are in
+[`3-attempt-requirements.md`](3-attempt-requirements.md) and
+[`k05-a04-mapping-v1.tsv`](k05-a04-mapping-v1.tsv).
+
+Version 2 remains the maintained engine. K05-S03 must wire the candidate into
+real callers only after the source, qualification and shared A04 pins are bound.
+The retained Android receipt keeps its v1 meaning; later Android adoption needs
+a new numbered writer rather than an inferred mapping.
