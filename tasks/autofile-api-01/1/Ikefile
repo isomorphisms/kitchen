@@ -1,0 +1,12 @@
+accept depends on toolchain producer independent
+
+toolchain depends on
+    "$[ENV.AUTOFILE_ICK]" -fno-link-libatomic -std=c11 -O2 "$[ENV.AUTOFILE_AICI_ROOT]/src/aici.c" -o "$[ENV.AUTOFILE_EVIDENCE]/toolchain-check"
+    "$[ENV.AUTOFILE_EVIDENCE]/toolchain-check" verify "$[ENV.AUTOFILE_AICI_ROOT]/contracts/build-toolchain-v0.contract.tsv" "$[ENV.AUTOFILE_PRODUCER_ROOT]"
+    "$[ENV.AUTOFILE_EVIDENCE]/toolchain-check" verify "$[ENV.AUTOFILE_AICI_ROOT]/contracts/build-toolchain-v0.contract.tsv" "$[ENV.AUTOFILE_AICI_ROOT]/autofile-api"
+
+producer depends on
+    make -C "$[ENV.AUTOFILE_PRODUCER_ROOT]" clean check ICK="$[ENV.AUTOFILE_ICK]"
+
+independent depends on producer
+    make -C "$[ENV.AUTOFILE_AICI_ROOT]/autofile-api" clean check ICK="$[ENV.AUTOFILE_ICK]" PRODUCER="$[ENV.AUTOFILE_PRODUCER_ROOT]"
