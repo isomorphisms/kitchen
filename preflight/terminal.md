@@ -2,7 +2,7 @@
 
 Apply this preflight before presenting any runnable command, including tests.
 Source-dependent POSIX test handoffs must also pass the executable
-`tasks/source-handoff/1.sh` producer gate. Prose checks cannot replace it.
+`tasks/source-handoff/2.sh` producer gate. Prose checks cannot replace it.
 
 ## Context
 

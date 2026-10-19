@@ -6,11 +6,12 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' 0
 trap 'exit 130' INT
 trap 'exit 143' HUP TERM
-engine=$root/tasks/source-handoff/1.sh
+engine=$root/tasks/source-handoff/2.sh
 repo="$work/checkout with spaces and ' quote"
 remote=$work/published.git
 contract=$work/contract.tsv
-mkdir "$work/outside"
+outside="$work/unrelated whitespace"
+mkdir "$outside"
 git_fixture() {
     env -i PATH="$PATH" HOME="$HOME" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null git "$@"
 }
@@ -37,7 +38,7 @@ write_contract() {
 }
 pin
 good_source=$source good_blob=$blob
-emit() { (cd "$work/outside" && sh "$engine" emit "$contract" "$digest" "$repo" "$scope") > "$work/served" 2> "$work/error"; }
+emit() { (cd "$outside" && sh "$engine" emit "$contract" "$digest" "$repo" "$scope") > "$work/served" 2> "$work/error"; }
 count=0
 passed() { count=$((count + 1)); printf 'ok %s - %s\n' "$count" "$1"; }
 reject() {
@@ -45,7 +46,7 @@ reject() {
     grep -F "stage=$1 " "$work/error" >/dev/null
     test ! -s "$work/served"
 }
-execute() { (cd "$work/outside" && sh -e "$work/served") > "$work/output" 2> "$work/error"; }
+execute() { (cd "$outside" && sh -e "$work/served") > "$work/output" 2> "$work/error"; }
 emit
 cp "$work/served" "$work/good-command"
 execute
@@ -66,7 +67,7 @@ grep -Fx dirty "$repo/tests/check.sh" >/dev/null
 grep -Fx preserve "$repo/untracked" >/dev/null
 passed 'dirty bytes, untracked bytes and HEAD survive'
 saved_repo=$repo
-repo=$work/outside
+repo=$outside
 reject checkout-invalid
 passed 'arbitrary noncheckout is classified before any source claim'
 repo=$work/missing
@@ -122,7 +123,7 @@ reject contract
 passed 'moving branch is not an immutable source contract'
 source=$good_source
 write_contract
-GIT_DIR="$work/absent" GIT_WORK_TREE="$work/outside" emit
+GIT_DIR="$work/absent" GIT_WORK_TREE="$outside" emit
 passed 'inherited Git directory and worktree do not redirect verification'
 git_fixture -C "$repo" replace "$good_source" "$empty_source"
 emit
@@ -207,4 +208,185 @@ printf '\n# edited after emission\n' >> "$engine"
 execute
 grep -F 'stage=engine ' "$work/error" >/dev/null
 passed 'engine changes after emission are rejected'
+
+# Resource and completeness cases for the maintained version 2 adapter.
+engine=$root/tasks/source-handoff/2.sh
+repo=$saved_repo
+scope=baseline
+printf '%s\n' '#!/bin/sh' 'printf "selected test: ok\n"' > "$repo/tests/check.sh"
+printf '%s\n' '#!/bin/sh' 'printf "helper fixture: ok\n"' > "$repo/tests/helper.sh"
+git_fixture -C "$repo" add tests/check.sh tests/helper.sh
+git_fixture -C "$repo" commit -qm resource-fixture
+git_fixture -C "$repo" push -q origin HEAD:refs/heads/resource-fixture
+source=$(git_fixture -C "$repo" rev-parse HEAD)
+blob=$(git_fixture -C "$repo" rev-parse HEAD:tests/check.sh)
+helper_blob=$(git_fixture -C "$repo" rev-parse HEAD:tests/helper.sh)
+write_resource_contract() {
+    printf 'schema\tsource-handoff-v1\nrepository\t%s\nsource\t%s\nentry\ttests/check.sh\ncontext\tposix-sh-existing-checkout\nmutation\ttemporary-only-reviewed-test\nrerun\treuse-verified-checkout\nscope\tbaseline\nexcluded\trepaired-feature;physical-device;follower-acceptance\nmarker\tselected test: ok\nfile\ttests/check.sh\t%s\nfile\ttests/helper.sh\t%s\n' "$remote" "$source" "$blob" "$helper_blob" > "$contract"
+    digest=$(git_fixture hash-object "$contract")
+}
+write_resource_contract
+emit
+test "$(tail -n 1 "$work/served")" = '# source-handoff-unit=COMPLETE'
+execute
+grep -Fx 'acceptance=PASS' "$work/output" >/dev/null
+passed 'complete two-file manifest emits and executes as one marked unit'
+
+cwd_before=$(pwd -P)
+options_before=$(set +o)
+git_fixture -C "$repo" status --porcelain > "$work/resource-status-before"
+printf 'unrelated sentinel\n' > "$work/unrelated-sentinel"
+emit
+execute
+test "$(pwd -P)" = "$cwd_before"
+test "$(set +o)" = "$options_before"
+git_fixture -C "$repo" status --porcelain > "$work/resource-status-after"
+cmp "$work/resource-status-before" "$work/resource-status-after"
+grep -Fx 'unrelated sentinel' "$work/unrelated-sentinel" >/dev/null
+passed 'successful preparation preserves cwd, shell options, checkout and unrelated sentinel'
+
+mkdir "$work/no-scratch-parent"
+if TMPDIR="$work/no-scratch-parent/absent" emit; then
+    printf 'unexpected emission with unavailable scratch\n' >&2
+    exit 1
+fi
+grep -F 'stage=temporary private scratch allocation failed' "$work/error" >/dev/null
+test ! -s "$work/served"
+passed 'unavailable scratch blocks without partial served output'
+
+base_path=$PATH
+real_awk=$(command -v awk)
+fault_bin=$work/fault-bin
+mkdir "$fault_bin"
+cat > "$fault_bin/awk" <<EOF
+#!/bin/sh
+case "\$*" in
+    *'print \$2 "\\t" \$3'*)
+        "$real_awk" "\$@" | sed '\$d'
+        exit 0
+        ;;
+esac
+exec "$real_awk" "\$@"
+EOF
+chmod +x "$fault_bin/awk"
+PATH="$fault_bin:$base_path"
+export PATH
+if emit; then
+    printf 'unexpected emission from omitted manifest row\n' >&2
+    exit 1
+fi
+PATH=$base_path
+export PATH
+grep -F 'stage=manifest staged manifest is short' "$work/error" >/dev/null
+test ! -s "$work/served"
+passed 'successful but short manifest producer cannot omit a contracted file'
+
+cat > "$fault_bin/awk" <<EOF
+#!/bin/sh
+case "\$*" in
+    *'print \$2 "\\t" \$3'*)
+        "$real_awk" "\$@" | sed -n '1p'
+        exit 74
+        ;;
+esac
+exec "$real_awk" "\$@"
+EOF
+chmod +x "$fault_bin/awk"
+PATH="$fault_bin:$base_path"
+export PATH
+if emit; then
+    printf 'unexpected emission after manifest write failure\n' >&2
+    exit 1
+fi
+PATH=$base_path
+export PATH
+grep -F 'stage=manifest contracted-file manifest write failed' "$work/error" >/dev/null
+test ! -s "$work/served"
+passed 'partial manifest write failure blocks before extraction or emission'
+
+real_mkdir=$(command -v mkdir)
+cat > "$fault_bin/mkdir" <<EOF
+#!/bin/sh
+"$real_mkdir" "\$@" || exit \$?
+last=
+for item do last=\$item; done
+case \$last in
+    */payload/tests)
+        ln -s /dev/full "\$last/check.sh.next" || exit \$?
+        ;;
+esac
+EOF
+chmod +x "$fault_bin/mkdir"
+rm -f "$fault_bin/awk"
+PATH="$fault_bin:$base_path"
+export PATH
+if emit; then
+    printf 'unexpected emission after extraction capacity failure\n' >&2
+    exit 1
+fi
+PATH=$base_path
+export PATH
+grep -F 'stage=extraction cannot extract committed bytes' "$work/error" >/dev/null
+test ! -s "$work/served"
+passed 'exhausted extraction destination cannot leave an accepted payload'
+
+rm -f "$fault_bin/mkdir"
+emit
+cat > "$fault_bin/mkdir" <<EOF
+#!/bin/sh
+"$real_mkdir" "\$@" || exit \$?
+last=
+for item do last=\$item; done
+case \$last in
+    */payload)
+        "$real_mkdir" "\${last%/payload}/output.next" || exit \$?
+        ;;
+esac
+EOF
+chmod +x "$fault_bin/mkdir"
+PATH="$fault_bin:$base_path"
+export PATH
+execute
+PATH=$base_path
+export PATH
+grep -F 'stage=capture output/error capture failed' "$work/error" >/dev/null
+if grep -Fx 'acceptance=PASS' "$work/output" >/dev/null; then exit 1; fi
+passed 'failed stdout capture has no child-status or acceptance receipt'
+
+rm -f "$fault_bin/mkdir"
+real_cat=$(command -v cat)
+real_head=$(command -v head)
+cat > "$fault_bin/cat" <<EOF
+#!/bin/sh
+case \${1##*/} in
+    emission)
+        "$real_head" -c 40 "\$1"
+        exit 75
+        ;;
+esac
+exec "$real_cat" "\$@"
+EOF
+chmod +x "$fault_bin/cat"
+PATH="$fault_bin:$base_path"
+export PATH
+if emit; then
+    printf 'unexpected success after truncated final emission\n' >&2
+    exit 1
+fi
+PATH=$base_path
+export PATH
+grep -F 'stage=emission stdout did not receive' "$work/error" >/dev/null
+if grep -F 'source-handoff-unit=COMPLETE' "$work/served" >/dev/null; then exit 1; fi
+passed 'truncated stdout cannot present a complete runnable handoff unit'
+
+rm -f "$fault_bin/cat"
+if (cd "$outside" && ulimit -f 512 && sh "$engine" emit "$contract" "$digest" "$repo" "$scope") > "$work/served" 2> "$work/error"; then
+    test "$(tail -n 1 "$work/served")" = '# source-handoff-unit=COMPLETE'
+else
+    cat "$work/error" >&2
+    exit 1
+fi
+(cd "$outside" && ulimit -f 512 && sh -e "$work/served") > "$work/output" 2> "$work/error"
+grep -Fx 'acceptance=PASS' "$work/output" >/dev/null
+passed 'sufficient constrained file capacity remains eligible and repeatable'
 printf 'source handoff regression cases: %s passed\n' "$count"
