@@ -12,3 +12,12 @@ independent-field depends on
 
 generated-compiler depends on
 	"$[ENV.HOLO_GREASE]" "$[ENV.HOLO_KITCHEN_RECIPE]" recipe-generated "$[ENV.HOLO_CONTEXT]"
+
+compiler-bootstrap depends on
+	"$[ENV.HOLO_GREASE]" "$[ENV.HOLO_KITCHEN_RECIPE]" recipe-bootstrap "$[ENV.HOLO_CONTEXT]"
+
+compiler-api depends on
+	"$[ENV.HOLO_GREASE]" "$[ENV.HOLO_KITCHEN_RECIPE]" recipe-api "$[ENV.HOLO_CONTEXT]"
+
+generated-binding depends on
+	"$[ENV.HOLO_GREASE]" "$[ENV.HOLO_KITCHEN_RECIPE]" recipe-binding "$[ENV.HOLO_CONTEXT]"
