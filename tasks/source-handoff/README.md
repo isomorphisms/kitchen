@@ -1,10 +1,15 @@
-# Producer-to-human source handoff, version 1
+# Producer-to-human source handoff, maintained version 2
 
 Read requirements.md first. The shared gate replaces IB-specific selection logic
 for new handoffs; old numbered runners remain historical. Its bounded interface
 supports reviewed temporary-file-only POSIX source tests before Grease exists.
 It is not a general command evaluator, execution sandbox, installer, or proof
 that a test's oracle measures the requested feature.
+
+Version 1 remains unchanged as historical evidence. Version 2 is the maintained
+selector. It preserves the contract and invocation interface while checking
+resource-sensitive preparation and staging a complete emitted unit before stdout.
+See `2 unchecked resource boundaries.md` for the exact successor boundary.
 
 The producer supplies `emit`, an absolute contract path, its reviewed Git blob,
 an explicitly chosen verified checkout, and the independently requested scope.
@@ -26,6 +31,8 @@ bytes in scratch, requires exit zero AND the exact marker, and reports scope and
 excluded claims separately. The outer conditional intentionally keeps the human
 session alive even under errexit; therefore its shell exit alone is not acceptance.
 Read `acceptance=PASS`, the exact scope and `handoff-command=PASS` together.
+The served unit must also end with `# source-handoff-unit=COMPLETE`; without
+that final line, emission was partial and the unit must not be run.
 
 The receipt records the observed host and UID, which are observations, not device
 authentication. An emitted command is valid only for the selected target checkout
@@ -61,6 +68,23 @@ Reusable job rules:
    follower acceptance separately. A missing receipt stays missing.
 
 Regression: `tests/source-handoff.sh` uses real disposable Git publishers and
-checkouts, without a fake Git program. All identities vary per run. The deliberate
+checkouts, without a fake Git program. All identities vary per run. Its 36 cases
+include resource-fault wrappers around individual host utilities; those wrappers
+do not replace Git or the source-test candidate. The deliberate
 success-printing fixture tests wrapper selection only, never IB semantics. The
 separate audit also executes IB's real pinned baseline twice.
+
+## K05 stage observations candidate
+
+[`3-attempt.sh`](3-attempt.sh) is a separately versioned candidate writer for
+immutable required-stage attempts around this existing POSIX seam. It creates
+the attempt record before target execution, binds an independently supplied
+stage plan and material identities, and preserves raw A04-compatible rows
+without computing a Kitchen verdict. Its requirements and exact mapping are in
+[`3-attempt-requirements.md`](3-attempt-requirements.md) and
+[`k05-a04-mapping-v1.tsv`](k05-a04-mapping-v1.tsv).
+
+Version 2 remains the maintained engine. K05-S03 must wire the candidate into
+real callers only after the source, qualification and shared A04 pins are bound.
+The retained Android receipt keeps its v1 meaning; later Android adoption needs
+a new numbered writer rather than an inferred mapping.

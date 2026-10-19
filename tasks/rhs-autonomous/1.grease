@@ -1,0 +1,15 @@
+#!/usr/bin/env grease
+set -e
+if (int($#) !== 4) { echo 'requires absolute RHS root, fresh evidence path, Ithon and AI-CI verifier' >&2; exit 2 }
+var root = $1
+var evidence = $2
+var ithon = $3
+var checker = $4
+for path in [root, evidence, ithon, checker] {
+  if (not path.startsWith('/')) { echo 'RHS acceptance requires absolute paths' >&2; exit 2 }
+}
+test -d "$root"
+test -x "$ithon"
+test -s "$checker"
+"$ithon" "$checker" selftest
+"$ithon" "$checker" "$root" "$evidence"
