@@ -1,0 +1,14 @@
+retained-oracle depends on
+	"$HOLO_GREASE" "$HOLO_KITCHEN_RECIPE" recipe-retained "$HOLO_CONTEXT"
+
+independent-checker depends on
+	"$HOLO_GREASE" "$HOLO_KITCHEN_RECIPE" recipe-checker "$HOLO_CONTEXT"
+
+producer-field depends on
+	"$HOLO_GREASE" "$HOLO_KITCHEN_RECIPE" recipe-producer "$HOLO_CONTEXT"
+
+independent-field depends on
+	"$HOLO_GREASE" "$HOLO_KITCHEN_RECIPE" recipe-compare "$HOLO_CONTEXT"
+
+generated-compiler depends on
+	"$HOLO_GREASE" "$HOLO_KITCHEN_RECIPE" recipe-generated "$HOLO_CONTEXT"
