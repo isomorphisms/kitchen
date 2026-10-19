@@ -1,0 +1,46 @@
+#!/usr/bin/env grease
+set -o errexit -o nounset -o pipefail
+if (int($#) !== 3) { echo 'requires ABSOLUTE_IDRIC_SOURCE ABSOLUTE_BACKEND_SOURCE ABSOLUTE_NEW_FIXTURES_INSIDE_ANOTHER_GIT_WORKTREE' >&2; exit 2 }
+var idric = $1
+var backend = $2
+var fixtures = $3
+for path in "$idric" "$backend" "$fixtures" {
+    case "$path" in /*) ;; *) echo 'absolute source-identity test paths required' >&2; exit 2 ;; esac
+}
+test ! -e "$fixtures"
+var parent = "$(dirname -- "$fixtures")"
+test -d "$parent"
+var outer_head = "$(git -C "$parent" rev-parse HEAD)"
+var idric_head = "$(git -C "$idric" rev-parse HEAD)"
+var backend_head = "$(git -C "$backend" rev-parse HEAD)"
+test "$idric_head" = 2734ac5a86610eddfab73b1644d72b4ac85a65ee
+test "$outer_head" != "$idric_head"
+git -C "$idric" diff HEAD --exit-code --quiet
+git -C "$backend" diff HEAD --exit-code --quiet
+mkdir "$fixtures" "$fixtures/archive"
+git -C "$idric" archive "$idric_head" | tar -x -C "$fixtures/archive"
+test "$(git -C "$fixtures/archive/_" rev-parse HEAD)" = "$outer_head"
+make --no-print-directory -C "$fixtures/archive/_" --just-print src/IdrisPaths.idr > "$fixtures/archive-version.log"
+var outer_short = "$(git -C "$parent" rev-parse --short=9 HEAD)"
+grep -Fq "idrisVersion = ((0,8,0), \"$outer_short\")" "$fixtures/archive-version.log"
+if grep -Fq 'idrisVersion = ((0,8,0), "2734ac5a8")' "$fixtures/archive-version.log" {
+    echo 'archive counterexample unexpectedly retained the compiler source identity' >&2; exit 1
+}
+git -C "$idric" worktree add --detach "$fixtures/idric-worktree" "$idric_head"
+test -f "$fixtures/idric-worktree/.git"
+test "$(git -C "$fixtures/idric-worktree/_" rev-parse HEAD)" = "$idric_head"
+test -x "$fixtures/idric-worktree/edric"
+test -x "$fixtures/idric-worktree/_/edric"
+"$fixtures/idric-worktree/edric" --help > "$fixtures/edric-help.log"
+grep -Fq 'usage: ./_/edric' "$fixtures/edric-help.log"
+make --no-print-directory -C "$fixtures/idric-worktree/_" --just-print src/IdrisPaths.idr > "$fixtures/worktree-version.log"
+grep -Fq 'idrisVersion = ((0,8,0), "2734ac5a8")' "$fixtures/worktree-version.log"
+git -C "$backend" worktree add --detach "$fixtures/backend-worktree" "$backend_head"
+test -f "$fixtures/backend-worktree/.git"
+test "$(git -C "$fixtures/backend-worktree" rev-parse HEAD)" = "$backend_head"
+test "$(git -C "$idric" rev-parse HEAD)" = "$idric_head"
+test "$(git -C "$backend" rev-parse HEAD)" = "$backend_head"
+git -C "$idric" diff HEAD --exit-code --quiet
+git -C "$backend" diff HEAD --exit-code --quiet
+printf 'outer\t%s\nidric\t%s\nshader-backend\t%s\n' "$outer_head" "$idric_head" "$backend_head" > "$fixtures/source-identities.tsv"
+printf 'PASS archive identity counterexample and detached owner worktree identity; compiler/generation/GPU execution NOT_RUN\n'
