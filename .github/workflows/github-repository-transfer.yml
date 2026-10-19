@@ -20,8 +20,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          gh api repos/dilapidated-shed/grease/actions/artifacts/11727693085/zip > "$RUNNER_TEMP/grease.zip"
-          printf '%s  %s\n' 20c526c8bae5dc32a7b3d01a39eca5bdb7ee4c63fe540f34a07af7ba8b0d0039 "$RUNNER_TEMP/grease.zip" | sha256sum -c -
+          gh api repos/dilapidated-shed/grease/actions/artifacts/12192502970/zip > "$RUNNER_TEMP/grease.zip"
+          printf '%s  %s\n' 295329ec3bb419d90364fcb5937eafe4306b03f68b7aaa63089dadde8082ffb5 "$RUNNER_TEMP/grease.zip" | sha256sum -c -
           unzip -q "$RUNNER_TEMP/grease.zip" '_bin/cxx-asan/ysh' -d "$RUNNER_TEMP/grease"
           chmod 755 "$RUNNER_TEMP/grease/_bin/cxx-asan/ysh"
       - name: Run transfer generator and candidate under native Grease
