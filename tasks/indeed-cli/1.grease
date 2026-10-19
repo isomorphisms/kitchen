@@ -1,0 +1,41 @@
+#!/usr/bin/env grease
+# Source-bound, runtime-only acceptance. Acquires/builds/installs nothing.
+if (int($#) !== 7) { echo 'requires CLI_ROOT CLI_HEAD PROGRAM GREASE AICI_ROOT AICI_HEAD AICI' >&2; exit 2 }
+var cli_root = $1
+var cli_head = $2
+var program = $3
+var grease = $4
+var aici_root = $5
+var aici_head = $6
+var aici = $7
+var task_directory = "$(dirname -- "$0")"
+var recipe_root = "$(cd -- "$task_directory/../.." && pwd)"
+git -C "$recipe_root" diff --quiet
+test "$(git -C "$cli_root" rev-parse HEAD)" = "$cli_head"
+test "$(git -C "$aici_root" rev-parse HEAD)" = "$aici_head"
+git -C "$cli_root" diff --quiet
+git -C "$aici_root" diff --quiet
+test -x "$program"
+test -x "$grease"
+test -x "$aici"
+var program_directory = "$(dirname -- "$program")"
+var expected_source = "$(sha256sum "$cli_root/checkpoints/indeed/idric/Indeed.idric" | cut -d ' ' -f1)"
+test "$(cat "$program_directory/indeed_app/source.sha256")" = "$expected_source"
+var temporary = "$(mktemp -d)"
+cd -- "$temporary"
+INDEED_PROGRAM="$program" "$grease" "$cli_root/checkpoints/indeed/check.grease"
+"$program" audit-proofs --input "$cli_root/checkpoints/indeed/fixtures/requirements.json" > audit.tsv 2> audit.stderr
+tail -n +2 audit.tsv | cut -f3,7,8 > actual.tsv
+cp "$aici_root/indeed/requirements.expected.tsv" expected.tsv
+"$aici" verify "$aici_root/indeed/proof-classification.contract.tsv" "$temporary"
+cp actual.tsv accepted.tsv
+sed 's/^original\t1\t/original\t5\t/' accepted.tsv > actual.tsv
+try { "$aici" verify "$aici_root/indeed/proof-classification.contract.tsv" "$temporary" > mutant.stdout 2> mutant.stderr }
+if (_error.code === 0) { echo 'FAIL independent oracle accepted incorrect original-proof classification'; exit 1 }
+grep -F INDEED-PROOF-CLASSIFICATION mutant.stdout mutant.stderr > /dev/null
+cp accepted.tsv actual.tsv
+printf 'PASS\tindependent-oracle-rejects-mutant\n'
+printf 'source\t%s\nacceptance-source\t%s\n' "$cli_head" "$aici_head"
+git -C "$recipe_root" rev-parse HEAD
+sha256sum "$program" "$program_directory/indeed_app/indeed.so" "$program_directory/indeed_app/libicu_transport.so" "$grease" "$aici"
+printf 'live-search\tACCESS_BLOCKED\nreal-postings\tNOT_RETRIEVED\nandroid\tNOT_RUN\n'

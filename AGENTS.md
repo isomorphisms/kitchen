@@ -80,6 +80,12 @@ material observations, repaired system mirror, and source-handoff version 2.
 Use its selected action status; an old source-handoff candidate does not remain
 admitted after a relevant profile, correction, mirror, or material change.
 
+K05's separately versioned `tasks/source-handoff/3-attempt.sh` is a candidate
+observation writer, not yet the maintained caller. It accepts an independently
+supplied stage plan, creates an immutable attempt before execution, and emits
+raw A04-compatible observations. Do not treat its COMPLETE finalization as an
+aggregate PASS or silently map the retained Android v1 receipt into it.
+
 Other interpreters or mutation classes require a reviewed adapter and rejecting
 mutants before service; the source-test adapter must refuse them. This rule
 does not authorize a POSIX implementation of post-bootstrap Grease procedures.

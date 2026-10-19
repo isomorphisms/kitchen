@@ -92,3 +92,18 @@ separate audit also executes IB's real pinned baseline twice.
 `tests/source-handoff-qualification.pi` exercises the successor binding with
 checked Ithon and an explicitly synthetic AICI verifier fixture. That fixture
 tests the interface and rejecting mutants; it is not production AICI authority.
+
+## K05 stage observations candidate
+
+[`3-attempt.sh`](3-attempt.sh) is a separately versioned candidate writer for
+immutable required-stage attempts around this existing POSIX seam. It creates
+the attempt record before target execution, binds an independently supplied
+stage plan and material identities, and preserves raw A04-compatible rows
+without computing a Kitchen verdict. Its requirements and exact mapping are in
+[`3-attempt-requirements.md`](3-attempt-requirements.md) and
+[`k05-a04-mapping-v1.tsv`](k05-a04-mapping-v1.tsv).
+
+Version 2 remains the maintained engine. K05-S03 must wire the candidate into
+real callers only after the source, qualification and shared A04 pins are bound.
+The retained Android receipt keeps its v1 meaning; later Android adoption needs
+a new numbered writer rather than an inferred mapping.
