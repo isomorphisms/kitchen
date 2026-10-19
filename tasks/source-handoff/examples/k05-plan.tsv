@@ -1,0 +1,5 @@
+stage_id	actor	required	selected	depends_on	claim
+setup	kitchen	yes	yes	-	materialization
+execution	test-runner	yes	yes	setup	selected_test
+postcondition	kitchen	yes	yes	execution	success_marker
+reporting	kitchen	no	yes	postcondition	receipt_delivery

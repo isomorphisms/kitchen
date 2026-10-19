@@ -67,12 +67,24 @@ of a guessed mutation.
 ## Producer-to-human source handoffs
 
 For the existing pre-Grease POSIX source-test boundary, use
-`tasks/source-handoff/1.sh` and a reviewed, digest-bound task contract before
+`tasks/source-handoff/2.sh` and a reviewed, digest-bound task contract before
 emitting a command. Read its requirements and README. A source pin in job prose
 is not materialization evidence. Producer refresh and consumer execution are
 separate phases. Do not substitute a baseline scope for a blocked feature scope.
 The emitted child invocation is conditional so even a parent using errexit
 survives failure. Test the exact emitted text twice from outside the repository.
+
+For the A1 preparation covered by `tasks/android-diagnostic/prepare.pi`, first
+bind the exact Cat Food request/profile, accepted AICI projection, task-local
+material observations, repaired system mirror, and source-handoff version 2.
+Use its selected action status; an old source-handoff candidate does not remain
+admitted after a relevant profile, correction, mirror, or material change.
+
+K05's separately versioned `tasks/source-handoff/3-attempt.sh` is a candidate
+observation writer, not yet the maintained caller. It accepts an independently
+supplied stage plan, creates an immutable attempt before execution, and emits
+raw A04-compatible observations. Do not treat its COMPLETE finalization as an
+aggregate PASS or silently map the retained Android v1 receipt into it.
 
 Other interpreters or mutation classes require a reviewed adapter and rejecting
 mutants before service; the source-test adapter must refuse them. This rule

@@ -1,0 +1,25 @@
+name: Exact source control qualification
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  qualification:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: kitchen
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: isomorphisms/ithon
+          ref: d6e83969f82512e920fb17b44326cb54f31d015c
+          path: ithon
+          persist-credentials: false
+      - name: Run exact requirement and control qualification fixtures
+        working-directory: kitchen
+        run: |
+          ../ithon/ithon tests/source-handoff-qualification.pi \
+            --ithon "$GITHUB_WORKSPACE/ithon/ithon"

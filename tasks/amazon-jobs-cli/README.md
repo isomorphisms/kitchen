@@ -1,7 +1,7 @@
 # Amazon.jobs Idriç CLI — Kitchen acceptance
 
 The human-authorized Amazon.org research enters Flexible Pipes first.
-`tasks/amazon-jobs-cli/1.grease` provides *separate* `preflight`,
+`tasks/amazon-jobs-cli/2.grease` provides *separate* `preflight`,
 `build`, and `test` operations. No compiler, network library,
 Python client, provider token or JSON fixture is provisioned inside it.
 
@@ -20,3 +20,7 @@ failure is not a successful zero-job census. Neither a source-only
 contract nor synthetic fixture establishes the current Amazon organization.
 
 A1 ARM32 and C67 ARM64 compilation/execution are NOT_RUN.
+
+Version 1 is retained with its actual parser refusal. Version 2 repairs only
+the argument-count expression; this source change does not itself establish a
+compiled command, an installed executable, provider access or managed admission.

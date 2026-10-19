@@ -138,4 +138,33 @@ passed 'interrupted Git checkout is not treated as an absent commit'
 sh -c '. "$1"; printf "parent-alive\n"' shell "$runner" > "$work/parent" 2>/dev/null
 grep -Fx parent-alive "$work/parent" >/dev/null
 passed 'failure leaves parent shell alive'
+
+# Exercise the maintained shared producer with the existing IB contract shape.
+shared_remote=$work/shared-published.git
+shared_contract=$work/task/shared-handoff.tsv
+shared_engine=$root/tasks/source-handoff/2.sh
+shared_served=$work/shared-served
+git clone -q --bare "$repo" "$shared_remote"
+git -C "$repo" remote set-url origin "$shared_remote"
+good_implementation=$(awk -F '\t' '$1 == "implementation" { print $2 }' "$work/good.lock")
+good_test=$(awk -F '\t' '$1 == "test" { print $2 }' "$work/good.lock")
+awk -F '\t' -v OFS='\t' -v repository="$shared_remote" -v source="$good_source" -v implementation="$good_implementation" -v test_blob="$good_test" '
+    $1 == "repository" { $2=repository }
+    $1 == "source" { $2=source }
+    $1 == "file" && $2 == "lib/durable_object_store.grease" { $3=implementation }
+    $1 == "file" && $2 == "tests/test_durable_object_store.grease" { $3=test_blob }
+    { print }
+' "$root/tasks/ib-durable-store/handoff.tsv" > "$shared_contract"
+shared_digest=$(git hash-object "$shared_contract")
+shared_head_before=$(git -C "$repo" rev-parse HEAD)
+git -C "$repo" status --porcelain > "$work/shared-status-before"
+(cd "$work/outside" && sh "$shared_engine" emit "$shared_contract" "$shared_digest" "$repo" ordinary-file-baseline) > "$shared_served" 2> "$work/error"
+test "$(tail -n 1 "$shared_served")" = '# source-handoff-unit=COMPLETE'
+(cd "$work/outside" && sh -e "$shared_served") > "$work/output" 2> "$work/error"
+grep -Fx 'acceptance=PASS' "$work/output" >/dev/null
+grep -Fx 'acceptance_scope=ordinary-file-baseline' "$work/output" >/dev/null
+test "$(git -C "$repo" rev-parse HEAD)" = "$shared_head_before"
+git -C "$repo" status --porcelain > "$work/shared-status-after"
+cmp "$work/shared-status-before" "$work/shared-status-after"
+passed 'IB contract shape executes through maintained source-handoff version 2'
 printf 'ib handoff regression cases: %s passed\n' "$count"
