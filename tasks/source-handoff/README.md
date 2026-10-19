@@ -75,12 +75,23 @@ facts. A `source-test READY` result is the material-context admission to this
 adapter; a changed relevant input invalidates the old preparation receipt.
 Version 2 remains unchanged and retains its temporary-only POSIX boundary.
 
+After a complete unit has actual independently selected control results, use
+[`qualify.pi`](qualify.pi) to bind those results to the exact final served bytes.
+Read [`qualification.md`](qualification.md) first. The qualifier invokes the
+exact hashed AICI-owned verifier; Kitchen does not infer semantic adequacy from
+producer PASS text. Its output is source/control qualification and exposes
+candidate, selection and executed-evidence digests for KITCHEN-HANDOFF-01.
+
 Regression: `tests/source-handoff.sh` uses real disposable Git publishers and
 checkouts, without a fake Git program. All identities vary per run. Its 36 cases
 include resource-fault wrappers around individual host utilities; those wrappers
 do not replace Git or the source-test candidate. The deliberate
 success-printing fixture tests wrapper selection only, never IB semantics. The
 separate audit also executes IB's real pinned baseline twice.
+
+`tests/source-handoff-qualification.pi` exercises the successor binding with
+checked Ithon and an explicitly synthetic AICI verifier fixture. That fixture
+tests the interface and rejecting mutants; it is not production AICI authority.
 
 ## K05 stage observations candidate
 
