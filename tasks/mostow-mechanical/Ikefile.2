@@ -1,0 +1,18 @@
+host-tests depends on
+    "$[ENV.MOSTOW_GREASE]" "$[ENV.MOSTOW_ROOT]/tools/test-host.grease" "$[ENV.MOSTOW_ROOT]"
+
+kernel-tests depends on
+    "$[ENV.MOSTOW_GREASE]" "$[ENV.MOSTOW_ROOT]/tools/test-kernel.grease" "$[ENV.MOSTOW_ROOT]" "$[ENV.MOSTOW_KERNEL]"
+
+host-render depends on host-tests
+    "$[ENV.MOSTOW_GREASE]" "$[ENV.MOSTOW_ROOT]/tools/generate-fixture.grease" "$[ENV.MOSTOW_ROOT]"
+    git -C "$[ENV.MOSTOW_ROOT]" diff --exit-code -- fixtures/sheet_base.inc
+    "$[ENV.MOSTOW_GREASE]" "$[ENV.MOSTOW_ROOT]/tools/render-host.grease" "$[ENV.MOSTOW_ROOT]" "$[ENV.MOSTOW_ROOT]/build/host/zero.ppm" 0 0.45 -0.7
+
+mechanical-tests depends on host-tests
+    "$[ENV.MOSTOW_GREASE]" "$[ENV.MOSTOW_ROOT]/tools/test-mechanical.grease" "$[ENV.MOSTOW_ROOT]"
+
+mechanical-render depends on mechanical-tests
+    "$[ENV.MOSTOW_GREASE]" "$[ENV.MOSTOW_ROOT]/tools/render-host.grease" "$[ENV.MOSTOW_ROOT]" "$[ENV.MOSTOW_ROOT]/build/host/zero.ppm" 0 0.45 -0.7
+    mkdir -p "$[ENV.MOSTOW_ROOT]/build/host/encounters"
+    "$[ENV.MOSTOW_ROOT]/build/host/render-mostow" --acceptance "$[ENV.MOSTOW_ROOT]/build/host/encounters"

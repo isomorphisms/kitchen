@@ -1,0 +1,6 @@
+#!/usr/bin/env grease
+var task = ARGV[0]
+var application = ARGV[1]
+setglobal ENV.MOSTOW_KERNEL = ARGV[2]
+var grease = ENV.MOSTOW_GREASE
+"$grease" "$task/2.grease" "$task" "$application" kernel-tests
