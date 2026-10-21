@@ -1,0 +1,8 @@
+schema	wiggle-v1
+evidence	offline-computed
+origin	scripted
+fps	2
+frames	5
+width	96
+height	192
+backend	fixture-no-renderer

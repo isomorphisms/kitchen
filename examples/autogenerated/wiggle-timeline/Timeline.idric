@@ -1,0 +1,32 @@
+module Timeline
+
+choice control_kind one_of
+  scalar
+  coordinates
+  gesture
+  discrete_operation
+  sample_index
+
+choice interpolation one_of
+  linear
+  hold
+  event_only
+  source_sampled
+
+interpolation_allowed : control_kind → interpolation → Bool
+interpolation_allowed scalar linear = True
+interpolation_allowed scalar hold = True
+interpolation_allowed coordinates linear = True
+interpolation_allowed coordinates hold = True
+interpolation_allowed gesture event_only = True
+interpolation_allowed discrete_operation event_only = True
+interpolation_allowed sample_index source_sampled = True
+interpolation_allowed _ _ = False
+
+main : IO ()
+main = if interpolation_allowed scalar linear &&
+          interpolation_allowed discrete_operation event_only &&
+          not (interpolation_allowed discrete_operation linear) &&
+          not (interpolation_allowed gesture hold)
+       then putStrLn "PASS typed interpolation rules"
+       else putStrLn "FAIL typed interpolation rules"

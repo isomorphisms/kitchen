@@ -1,0 +1,5 @@
+camera.yaw	scalar	linear	radians	-4	4
+root	coordinates	linear	complex-plane	-2	2
+group	discrete	event-only	ATLAS-word	-	-
+touch	gesture	event-only	normalized	-	-
+audio.window_end	sample_index	source-sampled	sample	0	96000
