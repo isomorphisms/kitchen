@@ -1,0 +1,86 @@
+#!/usr/bin/env grease
+set -o errexit -o nounset -o pipefail
+if (int($#) !== 9) { echo 'requires SOURCE HEAD PACKAGER_POLICY SDK BUILD_TOOLS NDK IKE GREASE EVIDENCE' >&2; exit 2 }
+var source = $1
+var head = $2
+var policy = $3
+var sdk = $4
+var build_tools = $5
+var ndk = $6
+var ike = $7
+var grease = $8
+var evidence = $9
+for path in "$source" "$policy" "$sdk" "$build_tools" "$ndk" "$ike" "$grease" "$evidence" {
+  case "$path" in /*) ;; *) echo 'absolute paths required' >&2; exit 2 ;; esac
+  case "$path" in *[[:space:]]*|*\'*) echo 'unsupported path characters' >&2; exit 2 ;; esac
+}
+test "$(uname -sm)" = 'Linux x86_64'
+test "$(git -C "$source" rev-parse HEAD)" = "$head"
+test -z "$(git -C "$source" status --porcelain)"
+test "$(git -C "$policy" rev-parse HEAD)" = 11edd1e0d9748d7c618413ec9f5afad52049046a
+test -z "$(git -C "$policy" status --porcelain)"
+test "$(sha256sum "$ike" | cut -d ' ' -f1)" = dfdc99d4d36b36e6cced60d417df02d1528d73ace7d738a32451c5a825effb0b
+test -x "$grease"
+test ! -e "$evidence"
+var metadata = "$source/android/package.tsv"
+test -f "$metadata"
+var package = "$(awk -F '\t' '$1 == "package" {print $2}' "$metadata")"
+var label = "$(awk -F '\t' '$1 == "label" {print $2}' "$metadata")"
+var version_code = "$(awk -F '\t' '$1 == "version_code" {print $2}' "$metadata")"
+var version_name = "$(awk -F '\t' '$1 == "version_name" {print $2}' "$metadata")"
+var min_sdk = "$(awk -F '\t' '$1 == "min_sdk" {print $2}' "$metadata")"
+var target_sdk = "$(awk -F '\t' '$1 == "target_sdk" {print $2}' "$metadata")"
+var signing_lane = "$(awk -F '\t' '$1 == "signing_lane" {print $2}' "$metadata")"
+test "$package" = org.isomorphisms.mathieu
+test "$label" = Mathieu
+test "$version_code" = 1
+test "$version_name" = 0.1.0-development
+test "$min_sdk" = 26
+test "$target_sdk" = 35
+test "$signing_lane" = public-development
+test -f "$sdk/platforms/android-$target_sdk/android.jar"
+for tool in aapt2 zipalign apksigner { test -x "$build_tools/$tool" }
+var strip = "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
+test -x "$strip"
+var packager = "$policy/apk/build-nativeactivity-apk.sh"
+test -f "$packager"
+var signing = "$source/android/signing"
+test -f "$signing/mathieu-development.p12"
+test -f "$signing/mathieu-development.der"
+var certificate = "$(awk -F '\t' '$1 == "certificate_sha256" {print $2}' "$signing/identity.tsv")"
+test "$(sha256sum "$signing/mathieu-development.der" | cut -d ' ' -f1)" = "$certificate"
+test "$(sha256sum "$signing/mathieu-development.p12" | cut -d ' ' -f1)" = "$(awk -F '\t' '$1 == "keystore_sha256" {print $2}' "$signing/identity.tsv")"
+for abi in armeabi-v7a arm64-v8a x86_64 {
+  for profile in Debug Release {
+    var native = "$source/build/android/$abi/$profile/libmathieu.so"
+    test -f "$native"
+    grep -aFq "$head" "$native"
+  }
+}
+mkdir -m 700 "$evidence"
+printf 'source_head\t%s\npackager_source\t11edd1e0d9748d7c618413ec9f5afad52049046a\nsigning_lane\t%s\ncertificate_sha256\t%s\nAndroid_execution\tNOT_RUN\nphysical_A1\tNOT_RUN\nphysical_C67\tNOT_RUN\n' "$head" "$signing_lane" "$certificate" > "$evidence/identity.tsv"
+sha256sum "$0" "$metadata" "$packager" "$signing/mathieu-development.p12" "$signing/mathieu-development.der" "$ike" "$grease" "$strip" "$sdk/platforms/android-$target_sdk/android.jar" "$build_tools/aapt2" "$build_tools/apksigner" "$build_tools/lib/apksigner.jar" "$build_tools/zipalign" > "$evidence/materials.sha256"
+echo 'package depends on' > "$evidence/Ikefile"
+for abi in armeabi-v7a arm64-v8a x86_64 {
+  var target = ''
+  case "$abi" in armeabi-v7a) target=A1 ;; arm64-v8a) target=C67 ;; x86_64) target=emulator ;; esac
+  for profile in Debug Release {
+    var native = "$source/build/android/$abi/$profile/libmathieu.so"
+    var staged = "$evidence/native/$abi/$profile/libmathieu.so"
+    mkdir -p "$(dirname -- "$staged")"
+    cp "$native" "$staged"
+    "$strip" --strip-unneeded "$staged"
+    printf '%s\t%s\t%s\t%s\n' "$abi" "$profile" "$(wc -c < "$native" | tr -d '[:space:]')" "$(wc -c < "$staged" | tr -d '[:space:]')" >> "$evidence/native-sizes.tsv"
+    sha256sum "$native" "$staged" >> "$evidence/native.sha256"
+    var suffix = ''
+    if (profile === 'Debug') { suffix=-Debug }
+    var apk = "$evidence/Mathieu-$target$suffix.apk"
+    cat >> "$evidence/Ikefile" <<EOF
+    env ANDROID_HOME='$sdk' ANDROID_BUILD_TOOLS='$build_tools' ANDROID_PACKAGE_ID='$package' ANDROID_VERSION_CODE='$version_code' ANDROID_VERSION_NAME='$version_name' ANDROID_MIN_SDK='$min_sdk' ANDROID_TARGET_SDK='$target_sdk' ANDROID_EXPECTED_LABEL='$label' ANDROID_KEYSTORE='$signing/mathieu-development.p12' ANDROID_KEYSTORE_TYPE=PKCS12 ANDROID_KEY_ALIAS=mathieu-development ANDROID_STORE_PASSWORD=android ANDROID_KEY_PASSWORD=android ANDROID_EXPECTED_CERT_SHA256='$certificate' ANDROID_SOURCE_COMMIT='$head' bash '$packager' '$source/android/AndroidManifest.xml' '$staged' '$abi' '$apk' > '$evidence/$abi-$profile.log' 2>&1
+EOF
+  }
+}
+var identity = "sha256:$(sha256sum "$evidence/Ikefile" | cut -d ' ' -f1)"
+cd -- "$evidence"
+env IKE_RECIPE_RUNNER="$grease" IKE_RECEIPT="$evidence/ike.tsv" IKE_IKEFILE_IDENTITY="$identity" "$ike" package
+printf '\033[32mPASS\033[0m six signed NativeActivity APKs; Android execution NOT_RUN\n'
