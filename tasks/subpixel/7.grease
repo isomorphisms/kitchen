@@ -1,0 +1,201 @@
+#!/usr/bin/env grease
+set -o errexit -o nounset -o pipefail
+if (int($#) !== 2) { echo 'requires PHASE ABSOLUTE_FP_ROOT' >&2; exit 2 }
+var phase = $1
+var root = $2
+case "$phase" in preflight|bootstrap|producer|independent|font-preview|conway|seal) ;; *) echo 'unknown subpixel phase' >&2; exit 2 ;; esac
+case "$root" in /*) ;; *) echo 'absolute FP root required' >&2; exit 2 ;; esac
+case "$root" in *[[:space:]]*) echo 'pinned ai-ci recipe requires paths without whitespace' >&2; exit 2 ;; esac
+test "$root" = "$(realpath -- "$root")"
+test "$(uname -s)" = Linux
+test "$(uname -m)" = x86_64
+var inputs = "$root/_subpixel"
+var leaf = "$inputs/producer"
+var aici = "$inputs/aici"
+var compiler_source = "$inputs/ick"
+var ike_source = "$inputs/ike"
+var output = "$inputs/evidence"
+var compiler_stage = "$inputs/ick-artifact/ick-host-stage"
+var compiler_archive = "$inputs/ick-stage.zip"
+var compiler = "$compiler_stage/bin/gcc"
+var ike = "$inputs/bin/ike"
+var linker = '/usr/bin/x86_64-linux-gnu-gcc'
+test "$(realpath -- "$0")" = "$inputs/kitchen/tasks/subpixel/7.grease"
+var grease = "$inputs/runtime/bin/grease"
+test -x "$grease"
+
+printf 'Checking exact subpixel, independent oracle and tool sources\n'
+var producer_head = "$(git -C "$leaf" rev-parse HEAD)"
+if (producer_head !== 'f33a476c69da313745b58c10cf8057765f9cbec9') { echo 'producer revision mismatch' >&2; exit 2 }
+test "$(git -C "$aici" rev-parse HEAD)" = ce58794ed2eafa4d60644318314bde89e1638d92
+test "$(git -C "$inputs/conway" rev-parse HEAD)" = 42c99ed0d289162b6fd62d864fbf58fc042e24d8
+test "$(git -C "$compiler_source" rev-parse HEAD)" = c61e448251744a2f40ad743ebef1a027bdcd2f9d
+test "$(git -C "$compiler_source/gcc" rev-parse HEAD)" = 6294f1d9e7536e5ffcde09d1528c918d63abfef5
+test "$(git -C "$ike_source" rev-parse HEAD)" = a92fe68bf8aad8dfcfe9f7a7abd84e07290f7fe0
+for checkout in "$leaf" "$aici" "$compiler_source" "$ike_source" "$inputs/kitchen" "$inputs/conway" {
+    test "$checkout" = "$(realpath -- "$checkout")"
+    git -C "$checkout" diff HEAD --exit-code --quiet
+    # Only operation-owned build outputs are excluded; input dirtiness is refused.
+    case "$checkout" in
+        "$compiler_source")
+            test -z "$(git -C "$checkout" ls-files --others --exclude-standard -- . ':(exclude)source/**' ':(exclude)stage/**')" ;;
+        "$leaf")
+            test -z "$(git -C "$checkout" ls-files --others --exclude-standard -- . ':(exclude)build/**' ':(exclude)subpixel/build/**')" ;;
+        "$aici")
+            test -z "$(git -C "$checkout" ls-files --others --exclude-standard -- . ':(exclude)subpixel/build/**')" ;;
+        *)
+            test -z "$(git -C "$checkout" ls-files --others --exclude-standard)" ;;
+    esac
+}
+test -x "$linker"
+grep -Fxq gcc_commit=6294f1d9e7536e5ffcde09d1528c918d63abfef5 "$compiler_source/ick/SOURCE.lock"
+test "$(sha256sum "$compiler_archive" | cut -d ' ' -f1)" = 8ee043088fffadba3704fd567c206c4852b0de69f0b8bb76a131bfb8fa4004a4
+test "$(sha256sum "$compiler" | cut -d ' ' -f1)" = 45805e3295f2709737fcc87985a8a2341aa8663ff8e4e398d2a9d78dc1283e10
+var frontend = "$compiler_stage/libexec/gcc/x86_64-pc-linux-gnu/17.0.0/cc1"
+test "$(readlink -f -- "$("$compiler" -print-prog-name=cc1)")" = "$frontend"
+test "$(sha256sum "$frontend" | cut -d ' ' -f1)" = c09665543aa807967d22bcaf0959aedd970f9d21be309d42170e4bae5a555292
+test -z "${GCC_EXEC_PREFIX-}${COMPILER_PATH-}"
+
+if (phase === 'preflight') {
+    for fresh in "$output" "$inputs/bin" "$compiler_source/build" "$compiler_source/stage" "$compiler_source/source" "$leaf/build" "$leaf/subpixel/build" "$aici/subpixel/build" {
+        if test -e "$fresh" { echo "refusing previous output: $fresh" >&2; exit 2 }
+    }
+    mkdir -m 700 "$output"
+    printf 'producer\t%s\naici\t%s\nconway\t%s\ncompiler_acquisition\tauthenticated-source-built-artifact\n' \
+        "$producer_head" "$(git -C "$aici" rev-parse HEAD)" "$(git -C "$inputs/conway" rev-parse HEAD)" > "$output/preflight.tsv"
+    printf '\033[32mPASS\033[0m source identity and fresh host workspace\n'
+    exit 0
+}
+test -s "$output/preflight.tsv"
+
+if (phase === 'bootstrap') {
+    # The exact source-built compiler artifact was authenticated above.
+    # This stage compiles Ike; it does not claim a new compiler source build.
+    mkdir "$inputs/bin"
+    "$compiler" -O2 -std=c11 -Wall -Wextra -Werror -pedantic -fPIC \
+        -c "$ike_source/ike.c" -o "$output/ike.o"
+    "$linker" "$output/ike.o" -o "$ike"
+    test "$("$compiler" -dumpmachine)" = x86_64-pc-linux-gnu
+    sha256sum "$compiler" "$frontend" "$compiler_archive" "$output/ike.o" "$ike" > "$output/toolchain.sha256"
+    printf '\033[32mPASS\033[0m authenticated source-built ICK; Ike freshly ICK-compiled and host-linked\n'
+    exit 0
+}
+test -s "$output/toolchain.sha256"
+sha256sum -c "$output/toolchain.sha256"
+var ike_digest = "$(sha256sum "$ike" | cut -d ' ' -f1)"
+
+if (phase === 'producer') {
+    test ! -e "$output/producer.tsv"
+    cd -- "$leaf"
+    env -u IKE_RECIPE_RUNNER ICK_SOURCE_DIR="$compiler_source" ICK_CC="$compiler" \
+        ICK_ARTIFACT_STAGE="$compiler_stage" ICK_STAGE_ARCHIVE="$compiler_archive" \
+        HOST_LINKER="$linker" IKE_BIN="$ike" IKE_SOURCE_DIR="$ike_source" \
+        IKE_EXPECTED_SHA256="$ike_digest" IKE_RECEIPT="$output/producer.tsv" \
+        sh scripts/run-ike.sh preview
+    mkdir "$output/preview"
+    test -s "$leaf/subpixel/build/font-masks.tsv"
+    test -s "$leaf/subpixel/build/font-metrics.tsv"
+    for strategy in baseline quadratic cubic auto {
+        test -s "$leaf/subpixel/build/path-$strategy.ppm"
+        test -s "$leaf/subpixel/build/path-$strategy.tsv"
+    }
+    find "$leaf/subpixel/build" -maxdepth 1 -type f \
+        '(' -name '*.ppm' -o -name 'font-*.tsv' -o -name 'path-*.tsv' ')' \
+        -exec cp -t "$output/preview/" '{}' '+'
+    cp "$leaf/subpixel/build/ick/path-render" "$leaf/subpixel/build/ick/font-5x7-preview" "$output/preview/"
+    printf '\033[32mPASS\033[0m producer preview through Ike and ICK\n'
+    exit 0
+}
+
+if (phase === 'independent') {
+    test -s "$output/producer.tsv"
+    test ! -e "$output/independent.tsv"
+    cd -- "$aici/subpixel"
+    var independent_digest = "$(sha256sum Ikefile | cut -d ' ' -f1)"
+    var independent_identity = "sha256:$independent_digest"
+    env -u IKE_RECIPE_RUNNER ICK_SOURCE_DIR="$compiler_source" ICK_CC="$compiler" \
+        ICK_ARTIFACT_STAGE="$compiler_stage" ICK_STAGE_ARCHIVE="$compiler_archive" \
+        HOST_LINKER="$linker" LEAF_ROOT="$leaf" \
+        IKE_IKEFILE_IDENTITY="$independent_identity" IKE_RECEIPT="$output/independent.tsv" \
+        "$ike" accept | tee "$output/independent.log"
+    "$grease" "$inputs/kitchen/tasks/subpixel/check-independent-log.grease" "$output/independent.log"
+    ./build/receipt-check "$output/independent.tsv" "$independent_identity"
+    awk '{ if ($0 == "final_result\tPASS") print "final_result\tFAIL"; else print }' "$output/independent.tsv" > "$output/bad-final.tsv"
+    try { ./build/receipt-check "$output/bad-final.tsv" "$independent_identity" > "$output/bad-final.log" 2>&1 }
+    if (_error.code !== 1) { echo 'forged final receipt accepted' >&2; exit 1 }
+    grep -Fq 'AICI_SUBPIXEL_RECEIPT_REJECT final result' "$output/bad-final.log"
+    awk -F '\t' '{ if ($1 == "selected_target_hex") print "selected_target_hex\t00"; else print }' "$output/independent.tsv" > "$output/bad-target.tsv"
+    try { ./build/receipt-check "$output/bad-target.tsv" "$independent_identity" > "$output/bad-target.log" 2>&1 }
+    if (_error.code !== 1) { echo 'forged selected-target receipt accepted' >&2; exit 1 }
+    grep -Fq 'AICI_SUBPIXEL_RECEIPT_REJECT selected target' "$output/bad-target.log"
+    cp build/mutant-3.log build/mutant-5.log build/mutant-plane.log build/mutant-framebuffer.log "$output/"
+    cp build/path-halfwidth.log build/path-overwrite.log build/path-transform.log build/path-cancel.log \
+        build/closed-C.log build/merged-8.log "$output/"
+    printf 'receipt_negatives\tPASS\n' > "$output/receipt-negatives.tsv"
+    printf '\033[32mPASS\033[0m independent rational/path/font oracles, ten defects and receipt negatives\n'
+    exit 0
+}
+
+if (phase === 'font-preview') {
+    test -s "$output/independent.tsv"
+    test ! -e "$output/font-preview.tsv"
+    cd -- "$aici/subpixel"
+    var identity = "sha256:$(sha256sum Ikefile | cut -d ' ' -f1)"
+    env -u IKE_RECIPE_RUNNER ICK_SOURCE_DIR="$compiler_source" ICK_CC="$compiler" \
+        ICK_ARTIFACT_STAGE="$compiler_stage" ICK_STAGE_ARCHIVE="$compiler_archive" \
+        HOST_LINKER="$linker" LEAF_ROOT="$leaf" GREASE_BINARY="$grease" \
+        IKE_IKEFILE_IDENTITY="$identity" IKE_RECEIPT="$output/font-preview.tsv" \
+        "$ike" font-preview | tee "$output/font-preview.log"
+    ./build/font-preview/receipt-check "$output/font-preview.tsv" "$identity" font-preview '"$GREASE_BINARY" font-preview-accept.grease'
+    ./build/font-preview/verify --preview "$output/preview" | tee "$output/collected-font-preview.log"
+    grep -Fxq 'AICI_FONT_PREVIEW_ACCEPT literal bitmap, independent geometry and exact mask/count/image round trip: PASS' "$output/collected-font-preview.log"
+    awk -F '\t' '{if ($1 == "selected_target_hex") print "selected_target_hex\t00"; else print}' "$output/font-preview.tsv" > "$output/font-preview-bad-target.tsv"
+    try { ./build/font-preview/receipt-check "$output/font-preview-bad-target.tsv" "$identity" font-preview '"$GREASE_BINARY" font-preview-accept.grease' > "$output/font-preview-bad-target.log" 2>&1 }
+    if (_error.code !== 1) { echo 'forged font-preview target accepted' >&2; exit 1 }
+    grep -Fq 'AICI_SUBPIXEL_RECEIPT_REJECT selected target' "$output/font-preview-bad-target.log"
+    awk '{if ($0 == "final_result\tPASS") print "final_result\tFAIL"; else print}' "$output/font-preview.tsv" > "$output/font-preview-bad-final.tsv"
+    try { ./build/font-preview/receipt-check "$output/font-preview-bad-final.tsv" "$identity" font-preview '"$GREASE_BINARY" font-preview-accept.grease' > "$output/font-preview-bad-final.log" 2>&1 }
+    if (_error.code !== 1) { echo 'forged font-preview final result accepted' >&2; exit 1 }
+    grep -Fq 'AICI_SUBPIXEL_RECEIPT_REJECT final result' "$output/font-preview-bad-final.log"
+    cp -a build/font-preview "$output/font-preview"
+    printf '\033[32mPASS\033[0m independent emitted font masks, counts, images and source defects\n'
+    exit 0
+}
+
+if (phase === 'conway') {
+    test -s "$output/font-preview.tsv"
+    test ! -e "$output/conway.tsv"
+    cd -- "$aici/subpixel"
+    var identity = "sha256:$(sha256sum Ikefile | cut -d ' ' -f1)"
+    env -u IKE_RECIPE_RUNNER ICK_SOURCE_DIR="$compiler_source" ICK_CC="$compiler" \
+        ICK_ARTIFACT_STAGE="$compiler_stage" ICK_STAGE_ARCHIVE="$compiler_archive" \
+        HOST_LINKER="$linker" LEAF_ROOT="$leaf" CONWAY_ROOT="$inputs/conway" GREASE_BINARY="$grease" \
+        IKE_IKEFILE_IDENTITY="$identity" IKE_RECEIPT="$output/conway.tsv" \
+        "$ike" conway | tee "$output/conway.log"
+    ./build/receipt-check "$output/conway.tsv" "$identity" conway '"$GREASE_BINARY" conway-accept.grease'
+    awk -F '\t' '{if ($1 == "selected_target_hex") print "selected_target_hex\t00"; else print}' "$output/conway.tsv" > "$output/conway-bad-target.tsv"
+    try { ./build/receipt-check "$output/conway-bad-target.tsv" "$identity" conway '"$GREASE_BINARY" conway-accept.grease' > "$output/conway-bad-target.log" 2>&1 }
+    if (_error.code !== 1) { echo 'forged Conway target accepted' >&2; exit 1 }
+    grep -Fq 'AICI_SUBPIXEL_RECEIPT_REJECT selected target' "$output/conway-bad-target.log"
+    awk '{if ($0 == "final_result\tPASS") print "final_result\tFAIL"; else print}' "$output/conway.tsv" > "$output/conway-bad-final.tsv"
+    try { ./build/receipt-check "$output/conway-bad-final.tsv" "$identity" conway '"$GREASE_BINARY" conway-accept.grease' > "$output/conway-bad-final.log" 2>&1 }
+    if (_error.code !== 1) { echo 'forged Conway final result accepted' >&2; exit 1 }
+    grep -Fq 'AICI_SUBPIXEL_RECEIPT_REJECT final result' "$output/conway-bad-final.log"
+    cp -a build/conway "$output/conway"
+    printf '\033[32mPASS\033[0m independent Conway source defects and exact target receipt\n'
+    exit 0
+}
+
+test -s "$output/producer.tsv"
+test -s "$output/independent.tsv"
+test -s "$output/receipt-negatives.tsv"
+test -s "$output/font-preview.tsv"
+test -s "$output/collected-font-preview.log"
+test -s "$output/conway.tsv"
+test -s "$output/preview/curve-3x3-vs-5x5.ppm"
+test -s "$output/preview/font-masks.tsv"
+test ! -e "$output/result.tsv"
+printf 'host_baseline\tPASS\nwhole_curve_engine\tPASS\nfont_5x7_samples\tPASS\nfont_preview_roundtrip\tPASS\nconway_bridge\tPASS\nproduction_admission\tNOT_ACCEPTED\nmodel_dispatch\tNOT_IMPLEMENTED\nphysical_A1_C67\tNOT_RUN\n' > "$output/result.tsv"
+find "$output" -type f '!' -name result.sha256 -exec sha256sum '{}' '+' > "$output/result.sha256"
+sha256sum -c "$output/result.sha256"
+printf '\033[32mPASS\033[0m pinned subpixel host qualification sealed\n'
