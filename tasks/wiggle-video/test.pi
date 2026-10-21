@@ -1,0 +1,100 @@
+"""Boundary tests; mathematical engines are deliberately not simulated here."""
+from pathlib import Path
+from builtins import list, str, int, AssertionError
+import shutil
+import subprocess
+import sys
+import tempfile
+import hashlib
+
+
+def main() → None:
+    args ∈ list[str] ← sys.argv
+    ithon ∈ str ← args[1]
+    kitchen ∈ Path ← Path(args[2])
+    candidate ∈ str ← str(kitchen.joinpath("tasks/wiggle-video/2.pi"))
+    fixture ∈ Path ← kitchen.joinpath("fixtures/wiggle-video/mixed")
+    workspace ∈ Path ← Path(tempfile.mkdtemp(prefix="wiggle-tests-"))
+    trace ∈ Path ← workspace.joinpath("trace with spaces")
+    shutil.copytree(fixture, trace)
+    passing ∈ Path ← workspace.joinpath("plan.tsv")
+    result ∈ object ← subprocess.run([ithon, candidate, "plan", str(trace), str(passing)], capture_output=True)
+    status ∈ int ← result.returncode
+    if status != 0:
+        raise AssertionError(result.stderr)
+    text ∈ str ← passing.read_text()
+    required ∈ list[str] ← [
+        "1\t1/2\tstate\tcamera.yaw\t1/2\t0\t0",
+        "2\t1\tstate\troot\t0,0\t0\t1",
+        "1\t1/2\tstate\taudio.window_end\t0\t0\t2",
+        "1\t1/2\tevent\tgroup\ta\t1/4\t3\n1\t1/2\tevent\tgroup\tb\t1/4\t4",
+        "4\t2\tstate\tcamera.yaw\t2\t2\t8"
+    ]
+    for expected in required:
+        if not (expected in text):
+            raise AssertionError(expected)
+    controls ∈ str ← trace.joinpath("controls.tsv").read_text()
+    events ∈ str ← trace.joinpath("events.tsv").read_text()
+    cases ∈ list[list[str]] ← [
+        ["controls.tsv", "group\tdiscrete\tevent-only", "group\tdiscrete\tlinear", "INTERPOLATION"],
+        ["events.tsv", "0\t0\tcamera.yaw\t0", "0\t0\tcamera.yaw\t5", "VALUE_RANGE"],
+        ["events.tsv", "0\t0\tcamera.yaw\t0", "0\t0\tcamera.yaw\tNaN", "Invalid literal"],
+        ["events.tsv", "1/4\t4\tgroup\tb", "1/4\t3\tgroup\tb", "EVENT_ORDER"],
+        ["events.tsv", "0\t1\troot\t-1,0", "1/8\t1\troot\t-1,0", "EVENT_ORDER"],
+        ["events.tsv", "0\t2\taudio.window_end\t0", "0\t2\taudio.window_end\t1/2", "SAMPLE_INDEX"],
+        ["events.tsv", "2\t8\tcamera.yaw\t2", "3\t8\tcamera.yaw\t2", "EVENT_ORDER"]
+    ]
+    index ∈ int ← 0
+    for case in cases:
+        trace.joinpath("controls.tsv").write_text(controls)
+        trace.joinpath("events.tsv").write_text(events)
+        changed ∈ Path ← trace.joinpath(case[0])
+        original ∈ str ← changed.read_text()
+        changed.write_text(original.replace(case[1], case[2]))
+        number ∈ str ← str(index)
+        destination ∈ str ← str(workspace.joinpath("bad-" + number))
+        result ← subprocess.run([ithon, candidate, "plan", str(trace), destination], capture_output=True)
+        status ← result.returncode
+        error ∈ str ← result.stderr.decode()
+        if status == 0 or not (case[3] in error) or Path(destination).exists():
+            raise AssertionError(error)
+        index ← index + 1
+    trace.joinpath("controls.tsv").write_text(controls)
+    trace.joinpath("events.tsv").write_text(events)
+    result ← subprocess.run([ithon, candidate, "plan", str(trace), str(passing)], capture_output=True)
+    status ← result.returncode
+    preserved ∈ str ← passing.read_text()
+    if status == 0 or preserved != text:
+        raise AssertionError("rerun overwrote the previous plan")
+    # A rejected real child must retain a failed attempt, not a stale movie.
+    git ∈ object ← subprocess.run(["git", "-C", str(kitchen), "rev-parse", "HEAD"], capture_output=True, text=True, check=True)
+    revision ∈ str ← git.stdout.strip()
+    git ← subprocess.run(["git", "-C", str(kitchen), "remote", "get-url", "origin"], capture_output=True, text=True, check=True)
+    origin ∈ str ← git.stdout.strip()
+    kitchen_text ∈ str ← str(kitchen)
+    source_identity ∈ str ← kitchen_text + "\t" + origin + "\t" + revision + "\n"
+    trace.joinpath("sources.tsv").write_text(source_identity)
+    trace.joinpath("inputs.tsv").write_text("")
+    child_path ∈ Path ← Path("/usr/bin/false")
+    adapter_hash ∈ str ← hashlib.sha256(child_path.read_bytes()).hexdigest()
+    build_hash ∈ str ← hashlib.sha256(kitchen.joinpath("tasks/movie-from-stills/build.sh").read_bytes()).hexdigest()
+    version_hash ∈ str ← hashlib.sha256(kitchen.joinpath("tasks/movie-from-stills/1.sh").read_bytes()).hexdigest()
+    trace.joinpath("tools.tsv").write_text("adapter\t" + adapter_hash + "\nbuild.sh\t" + build_hash + "\n1.sh\t" + version_hash + "\n")
+    failed ∈ Path ← workspace.joinpath("failed-attempt")
+    result ← subprocess.run([ithon, candidate, "render", str(trace), str(failed), str(child_path), str(kitchen)], capture_output=True)
+    status ← result.returncode
+    error ∈ str ← result.stderr.decode()
+    if status == 0 or not ("CHILD_FAILED" in error):
+        raise AssertionError(error)
+    failed_state ∈ str ← failed.joinpath("status.tsv").read_text()
+    if not ("FAILED_OR_INTERRUPTED" in failed_state) or failed.joinpath("movie.mp4").exists():
+        raise AssertionError("failed child became an accepted movie")
+    result ← subprocess.run([ithon, candidate, "render", str(trace), str(failed), str(child_path), str(kitchen)], capture_output=True)
+    error ← result.stderr.decode()
+    if not ("OUTPUT_EXISTS" in error):
+        raise AssertionError("failed attempt was reused")
+    print("PASS: exact rational interpolation, coupled coordinates, ordered discrete events, source samples, seven rejecting controls and rerun preservation")
+    print("PASS: rejected adapter retains failed attempt; rerun cannot replace it")
+
+
+main()

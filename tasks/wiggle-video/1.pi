@@ -1,0 +1,250 @@
+"""Typed mathematical clock and canonical still-to-movie handoff. No renderer."""
+from pathlib import Path
+from fractions import Fraction
+from builtins import ValueError, BaseException, list, dict, str, int, bool, len, abs, range
+import hashlib
+import math
+import subprocess
+import sys
+
+
+def reject(message ∈ str) → None:
+    raise ValueError(message)
+
+
+def digest(path ∈ Path) → str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def rows(path ∈ Path) → list[list[str]]:
+    result ∈ list[list[str]] ← []
+    text ∈ str ← path.read_text()
+    lines ∈ list[str] ← text.splitlines()
+    for line in lines:
+        if line and not line.startswith("#"):
+            result.append(line.split("\t"))
+    return result
+
+
+def metadata(path ∈ Path) → dict[str, str]:
+    result ∈ dict[str, str] ← {}
+    records ∈ list[list[str]] ← rows(path)
+    for row in records:
+        if len(row) != 2 or row[0] in result:
+            reject("METADATA: invalid or duplicate key")
+        result[row[0]] ← row[1]
+    return result
+
+
+def checked_number(value ∈ str) → Fraction:
+    number ∈ Fraction ← Fraction(value)
+    denominator ∈ int ← number.denominator
+    numerator ∈ int ← number.numerator
+    magnitude ∈ int ← abs(numerator)
+    if denominator > 1000000000 or magnitude > 1000000000000000:
+        reject("NUMBER: outside bounded rational domain")
+    return number
+
+
+def values(value ∈ str, kind ∈ str, low ∈ str, high ∈ str) → list[Fraction]:
+    result ∈ list[Fraction] ← []
+    parts ∈ list[str] ← value.split(",")
+    expected ∈ int ← 2 if kind == "coordinates" else 1
+    if len(parts) != expected:
+        reject("VALUE_SHAPE")
+    for part in parts:
+        number ∈ Fraction ← checked_number(part)
+        if number < checked_number(low) or number > checked_number(high):
+            reject("VALUE_RANGE")
+        denominator ∈ int ← number.denominator
+        if kind == "sample_index" and denominator != 1:
+            reject("SAMPLE_INDEX")
+        result.append(number)
+    return result
+
+
+def plan(trace ∈ Path) → tuple[dict[str, str], str]:
+    config ∈ dict[str, str] ← metadata(trace / "run.tsv")
+    if config.get("schema", "") != "wiggle-v1":
+        reject("SCHEMA")
+    if config.get("evidence", "") != "offline-computed":
+        reject("EVIDENCE: this driver cannot certify device execution")
+    if config.get("origin", "") not in ["scripted", "recorded-gesture", "audio-driven"]:
+        reject("INPUT_ORIGIN")
+    fps ∈ Fraction ← checked_number(config["fps"])
+    count ∈ int ← int(config["frames"])
+    width ∈ int ← int(config["width"])
+    height ∈ int ← int(config["height"])
+    if fps <= 0 or fps > 240 or count < 2 or count > 1000000:
+        reject("CLOCK")
+    if width < 2 or height < 2 or width > 8192 or height > 8192 or width % 2 or height % 2:
+        reject("DIMENSIONS")
+    controls ∈ dict[str, list[str]] ← {}
+    declarations ∈ list[list[str]] ← rows(trace / "controls.tsv")
+    for row in declarations:
+        if len(row) != 6 or row[0] in controls or not row[0]:
+            reject("CONTROL_SCHEMA")
+        name ∈ str ← row[0]
+        kind ∈ str ← row[1]
+        mode ∈ str ← row[2]
+        valid ∈ bool ← (kind in ["scalar", "coordinates"] and mode in ["linear", "hold"]) or (kind in ["gesture", "discrete"] and mode == "event-only") or (kind == "sample_index" and mode == "source-sampled")
+        if not valid:
+            reject("INTERPOLATION")
+        if kind not in ["gesture", "discrete"] and checked_number(row[4]) > checked_number(row[5]):
+            reject("CONTROL_RANGE")
+        controls[name] ← row
+    if not controls:
+        reject("CONTROLS_EMPTY")
+    events ∈ list[list[str]] ← rows(trace / "events.tsv")
+    last_time ∈ Fraction ← Fraction(-1)
+    last_order ∈ int ← -1
+    final_time ∈ Fraction ← Fraction(count - 1) / fps
+    for event in events:
+        if len(event) != 4 or event[2] not in controls:
+            reject("EVENT_SCHEMA")
+        time ∈ Fraction ← checked_number(event[0])
+        order ∈ int ← int(event[1])
+        if time < 0 or time > final_time or time < last_time or order <= last_order:
+            reject("EVENT_ORDER")
+        last_time ← time
+        last_order ← order
+        control ∈ list[str] ← controls[event[2]]
+        if control[1] not in ["gesture", "discrete"]:
+            values(event[3], control[1], control[4], control[5])
+        elif not event[3]:
+            reject("EVENT_EMPTY")
+    for name in controls:
+        if controls[name][2] != "event-only":
+            initial ∈ bool ← False
+            previous ∈ Fraction ← Fraction(-1)
+            for event in events:
+                if event[2] == name:
+                    time ∈ Fraction ← checked_number(event[0])
+                    if time == previous:
+                        reject("AMBIGUOUS_CONTROL_TIME")
+                    previous ← time
+                    if time == 0:
+                        initial ← True
+            if not initial:
+                reject("INITIAL_STATE")
+    # Each line retains the original event time/order as well as its frame.
+    output ∈ list[str] ← ["frame\ttime\trole\tcontrol\tvalue\tsource_time\torder"]
+    event_cursor ∈ int ← 0
+    for frame in range(count):
+        frame_time ∈ Fraction ← Fraction(frame) / fps
+        while event_cursor < len(events) and checked_number(events[event_cursor][0]) <= frame_time:
+            event ∈ list[str] ← events[event_cursor]
+            output.append(str(frame) + "\t" + str(frame_time) + "\tevent\t" + event[2] + "\t" + event[3] + "\t" + event[0] + "\t" + event[1])
+            event_cursor ← event_cursor + 1
+        for name in controls:
+            control ∈ list[str] ← controls[name]
+            if control[2] == "event-only":
+                continue
+            before ∈ list[str] ← []
+            after ∈ list[str] ← []
+            for event in events:
+                if event[2] == name:
+                    if checked_number(event[0]) <= frame_time:
+                        before ← event
+                    elif not after:
+                        after ← event
+            current ∈ list[Fraction] ← values(before[3], control[1], control[4], control[5])
+            if control[2] == "linear" and after:
+                following ∈ list[Fraction] ← values(after[3], control[1], control[4], control[5])
+                fraction ∈ Fraction ← (frame_time - checked_number(before[0])) / (checked_number(after[0]) - checked_number(before[0]))
+                for index in range(len(current)):
+                    current[index] ← current[index] + (following[index] - current[index]) * fraction
+            formatted ∈ list[str] ← []
+            for number in current:
+                formatted.append(str(number))
+            output.append(str(frame) + "\t" + str(frame_time) + "\tstate\t" + name + "\t" + ",".join(formatted) + "\t" + before[0] + "\t" + before[1])
+    return (config, "\n".join(output) + "\n")
+
+
+def call(argv ∈ list[str], log ∈ Path) → None:
+    with log.open("wb") as stream:
+        result ∈ object ← subprocess.run(argv, stdout=stream, stderr=subprocess.STDOUT, check=False)
+    status ∈ int ← result.returncode
+    if status != 0:
+        reject("CHILD_FAILED: " + argv[0] + " exit=" + str(status))
+
+
+def render(trace ∈ Path, output ∈ Path, adapter ∈ Path, kitchen ∈ Path) → None:
+    config ∈ dict[str, str] ← {}
+    evaluated ∈ str ← ""
+    config, evaluated ← plan(trace)
+    if not trace.is_absolute() or not output.is_absolute() or not adapter.is_absolute() or not kitchen.is_absolute():
+        reject("ABSOLUTE_PATH_REQUIRED")
+    if output.exists():
+        reject("OUTPUT_EXISTS")
+    # Pin data assets and both canonical builder files before effects.
+    input_rows ∈ list[list[str]] ← rows(trace / "inputs.tsv")
+    for row in input_rows:
+        if len(row) != 2:
+            reject("INPUT_SCHEMA")
+        relative ∈ Path ← Path(row[0])
+        if relative.is_absolute() or ".." in relative.parts or relative == Path("."):
+            reject("INPUT_PATH")
+        if digest(trace / relative) != row[1]:
+            reject("INPUT_HASH")
+    pins ∈ dict[str, str] ← metadata(trace / "tools.tsv")
+    if digest(adapter) != pins["adapter"]:
+        reject("ADAPTER_HASH")
+    for name in ["build.sh", "1.sh"]:
+        if digest(kitchen / "tasks/movie-from-stills" / name) != pins[name]:
+            reject("KITCHEN_HASH")
+    output.mkdir()
+    status_path ∈ Path ← output / "status.tsv"
+    status_path.write_text("status\tRUNNING\nevidence\toffline-computed\n")
+    try:
+        copied ∈ Path ← output / "trace"
+        copied.mkdir()
+        for name in ["run.tsv", "controls.tsv", "events.tsv", "inputs.tsv", "tools.tsv"]:
+            (copied / name).write_bytes((trace / name).read_bytes())
+        (output / "timeline.tsv").write_text(evaluated)
+        (output / "frames").mkdir()
+        call([str(adapter), str(trace), str(output / "timeline.tsv"), str(output)], output / "adapter.log")
+        hashes ∈ list[str] ← []
+        count ∈ int ← int(config["frames"])
+        for frame in range(count):
+            name ∈ str ← "frame-" + str(frame).zfill(6) + ".ppm"
+            hashes.append(name + "\t" + digest(output / "frames" / name))
+        actual ∈ list[Path] ← list((output / "frames").iterdir())
+        if len(actual) != count:
+            reject("FRAME_COUNT")
+        if not (output / "states.tsv").is_file():
+            reject("CHECKPOINTS_MISSING")
+        (output / "frames.tsv").write_text("\n".join(hashes) + "\n")
+        command ∈ list[str] ← [str(kitchen / "tasks/movie-from-stills/build.sh"), str(output / "frames/frame-%06d.ppm"), config["fps"], str(output / "movie.mp4")]
+        audio ∈ str ← config.get("audio", "")
+        if audio:
+            covered ∈ bool ← False
+            for row in input_rows:
+                if row[0] == audio:
+                    covered ← True
+            if not covered:
+                reject("AUDIO_NOT_PINNED")
+            command.append(str(trace / audio))
+        call(command, output / "kitchen.log")
+        # These are production observations; AI-CI supplies the acceptance verdict.
+        status_path.write_text("status\tPRODUCED_NOT_ACCEPTED\nevidence\toffline-computed\nmovie_sha256\t" + digest(output / "movie.mp4") + "\n")
+    except BaseException:
+        status_path.write_text("status\tFAILED_OR_INTERRUPTED\nevidence\toffline-computed\n")
+        raise
+
+
+def main() → None:
+    if len(sys.argv) == 4 and sys.argv[1] == "plan":
+        config ∈ dict[str, str] ← {}
+        evaluated ∈ str ← ""
+        config, evaluated ← plan(Path(sys.argv[2]))
+        destination ∈ Path ← Path(sys.argv[3])
+        with destination.open("x") as stream:
+            stream.write(evaluated)
+    elif len(sys.argv) == 6 and sys.argv[1] == "render":
+        render(Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4]), Path(sys.argv[5]))
+    else:
+        reject("usage: 1.pi plan TRACE OUTPUT | render TRACE OUTPUT ADAPTER KITCHEN")
+
+
+main()
