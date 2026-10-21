@@ -1,0 +1,35 @@
+#!/usr/bin/env grease
+set -o errexit -o nounset -o pipefail
+if (int($#) !== 8) { echo 'requires SOURCE HEAD ICK IKE GREASE NDK ABI EVIDENCE' >&2; exit 2 }
+var source = $1
+var head = $2
+var compiler = $3
+var ike = $4
+var grease = $5
+var ndk = $6
+var abi = $7
+var evidence = $8
+for path in "$source" "$compiler" "$ike" "$grease" "$ndk" "$evidence" {
+  case "$path" in /*) ;; *) echo 'absolute paths required' >&2; exit 2 ;; esac
+  case "$path" in *[[:space:]]*|*\'*) echo 'unsupported path characters' >&2; exit 2 ;; esac
+}
+case "$abi" in x86_64|armeabi-v7a|arm64-v8a) ;; *) echo 'unsupported ABI' >&2; exit 2 ;; esac
+test "$(git -C "$source" rev-parse HEAD)" = "$head"
+test -z "$(git -C "$source" status --porcelain)"
+test -x "$compiler"
+test "$(sha256sum "$ike" | cut -d ' ' -f1)" = dfdc99d4d36b36e6cced60d417df02d1528d73ace7d738a32451c5a825effb0b
+test -x "$grease"
+test -f "$ndk/source.properties"
+test ! -e "$evidence"
+mkdir -m 700 "$evidence"
+sha256sum "$0" "$compiler" "$ike" "$grease" "$ndk/source.properties" > "$evidence/materials.sha256"
+printf 'source_head\t%s\nabi\t%s\nc_frontend\tick\nassembler_linker\tndk\nAndroid_execution\tNOT_RUN\n' "$head" "$abi" > "$evidence/identity.tsv"
+cat > "$evidence/Ikefile" <<EOF
+build depends on
+    make -C '$source' -f android/Makefile library ICK_ANDROID='$compiler' NDK='$ndk' ABI='$abi' PROFILE=Debug SOURCE_SHA='$head' > '$evidence/debug.log' 2>&1
+    make -C '$source' -f android/Makefile library ICK_ANDROID='$compiler' NDK='$ndk' ABI='$abi' PROFILE=Release SOURCE_SHA='$head' > '$evidence/release.log' 2>&1
+EOF
+var identity = "sha256:$(sha256sum "$evidence/Ikefile" | cut -d ' ' -f1)"
+cd -- "$evidence"
+env IKE_RECIPE_RUNNER="$grease" IKE_RECEIPT="$evidence/ike.tsv" IKE_IKEFILE_IDENTITY="$identity" "$ike" build
+printf '\033[32mPASS\033[0m exact-source Android native libraries in Debug and Release\n'

@@ -1,0 +1,34 @@
+#!/usr/bin/env grease
+set -o errexit -o nounset -o pipefail
+if (int($#) !== 7) { echo 'requires SOURCE HEAD ICK IKE GREASE EVIDENCE EXPECTED_ICK_SHA256' >&2; exit 2 }
+var source = $1
+var head = $2
+var compiler = $3
+var ike = $4
+var grease = $5
+var evidence = $6
+var compiler_digest = $7
+for path in "$source" "$compiler" "$ike" "$grease" "$evidence" {
+  case "$path" in /*) ;; *) echo 'absolute paths required' >&2; exit 2 ;; esac
+  case "$path" in *[[:space:]]*|*\'*) echo 'unsupported path characters' >&2; exit 2 ;; esac
+}
+test "$(uname -sm)" = 'Linux x86_64'
+test "$(git -C "$source" rev-parse HEAD)" = "$head"
+test -z "$(git -C "$source" status --porcelain)"
+test -x "$compiler"
+test "$(sha256sum "$compiler" | cut -d ' ' -f1)" = "$compiler_digest"
+test "$(sha256sum "$ike" | cut -d ' ' -f1)" = dfdc99d4d36b36e6cced60d417df02d1528d73ace7d738a32451c5a825effb0b
+test -x "$grease"
+test ! -e "$evidence"
+mkdir -m 700 "$evidence"
+printf 'source_head\t%s\nike_source\t3f513e58ed2b83946fca8e9be6a952a582bafb85\n' "$head" > "$evidence/identity.tsv"
+sha256sum "$0" "$compiler" "$ike" "$grease" > "$evidence/materials.sha256"
+cat > "$evidence/Ikefile" <<EOF
+qualify depends on
+    make -C '$source' ICK='$compiler' PROFILE=Debug host-test > '$evidence/debug.log' 2>&1
+    make -C '$source' ICK='$compiler' PROFILE=Release host-test > '$evidence/release.log' 2>&1
+EOF
+var identity = "sha256:$(sha256sum "$evidence/Ikefile" | cut -d ' ' -f1)"
+cd -- "$evidence"
+env IKE_RECIPE_RUNNER="$grease" IKE_RECEIPT="$evidence/ike.tsv" IKE_IKEFILE_IDENTITY="$identity" "$ike" qualify
+printf '\033[32mPASS\033[0m exact-source ICK Debug and Release mathematical tests\n'
