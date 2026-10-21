@@ -1,0 +1,17 @@
+#!/usr/bin/env grease
+set -o errexit -o nounset -o pipefail
+if (int($#) !== 2) { echo 'requires GREASE RECIPE_DIRECTORY' >&2; exit 2 }
+var grease = $1
+var recipes = $2
+var work = "$(mktemp -d)"
+printf '%s\n' 'AICI_SUBPIXEL_ACCEPT independent 3x3/5x5 rational coverage and four source mutants: PASS' > "$work/legacy.log"
+try { "$grease" "$recipes/check-independent-log.grease" "$work/legacy.log" > "$work/reject.log" 2>&1 }
+if (_error.code !== 1) { echo 'legacy-only oracle was accepted' >&2; exit 1 }
+grep -Fxq 'subpixel whole-path/font acceptance missing' "$work/reject.log"
+printf '%s\n' 'AICI_SUBPIXEL_PATH_FONT_ACCEPT independent path, glyph masks and six negative controls: PASS' > "$work/path-only.log"
+try { "$grease" "$recipes/check-independent-log.grease" "$work/path-only.log" > "$work/reject-rational.log" 2>&1 }
+if (_error.code !== 1) { echo 'path-only oracle was accepted' >&2; exit 1 }
+grep -Fxq 'subpixel rational/alpha acceptance missing' "$work/reject-rational.log"
+cat "$work/legacy.log" "$work/path-only.log" > "$work/full.log"
+"$grease" "$recipes/check-independent-log.grease" "$work/full.log"
+printf '\033[32mPASS\033[0m complete independent markers and both missing-marker controls\n'

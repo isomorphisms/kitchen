@@ -1,0 +1,147 @@
+#!/usr/bin/env grease
+set -o errexit -o nounset -o pipefail
+if (int($#) !== 2) { echo 'requires PHASE ABSOLUTE_FP_ROOT' >&2; exit 2 }
+var phase = $1
+var root = $2
+case "$phase" in preflight|bootstrap|producer|independent|seal) ;; *) echo 'unknown subpixel phase' >&2; exit 2 ;; esac
+case "$root" in /*) ;; *) echo 'absolute FP root required' >&2; exit 2 ;; esac
+case "$root" in *[[:space:]]*) echo 'pinned ai-ci recipe requires paths without whitespace' >&2; exit 2 ;; esac
+test "$root" = "$(realpath -- "$root")"
+test "$(uname -s)" = Linux
+test "$(uname -m)" = x86_64
+var inputs = "$root/_subpixel"
+var leaf = "$inputs/producer"
+var aici = "$inputs/aici"
+var compiler_source = "$inputs/ick"
+var ike_source = "$inputs/ike"
+var output = "$inputs/evidence"
+var compiler = "$compiler_source/stage/bin/x86_64-linux-gnu-gcc"
+var ike = "$inputs/bin/ike"
+var linker = '/usr/bin/x86_64-linux-gnu-gcc'
+test "$(realpath -- "$0")" = "$inputs/kitchen/tasks/subpixel/5.grease"
+var grease = "$inputs/runtime/bin/grease"
+test -x "$grease"
+
+printf 'Checking exact subpixel, independent oracle and tool sources\n'
+var producer_head = "$(git -C "$leaf" rev-parse HEAD)"
+if (producer_head !== '0a09edede932ba80feb7f35addede3eb17baf6f3') { echo 'producer revision mismatch' >&2; exit 2 }
+test "$(git -C "$aici" rev-parse HEAD)" = 5f6abcc9185dc960d445e7a567b5441f23973a15
+test "$(git -C "$compiler_source" rev-parse HEAD)" = c61e448251744a2f40ad743ebef1a027bdcd2f9d
+test "$(git -C "$compiler_source/gcc" rev-parse HEAD)" = 6294f1d9e7536e5ffcde09d1528c918d63abfef5
+test "$(git -C "$ike_source" rev-parse HEAD)" = a92fe68bf8aad8dfcfe9f7a7abd84e07290f7fe0
+for checkout in "$leaf" "$aici" "$compiler_source" "$ike_source" "$inputs/kitchen" {
+    test "$checkout" = "$(realpath -- "$checkout")"
+    git -C "$checkout" diff HEAD --exit-code --quiet
+    # Only operation-owned build outputs are excluded; input dirtiness is refused.
+    case "$checkout" in
+        "$compiler_source")
+            test -z "$(git -C "$checkout" ls-files --others --exclude-standard -- . ':(exclude)source/**' ':(exclude)stage/**')" ;;
+        "$leaf")
+            test -z "$(git -C "$checkout" ls-files --others --exclude-standard -- . ':(exclude)build/**' ':(exclude)subpixel/build/**')" ;;
+        "$aici")
+            test -z "$(git -C "$checkout" ls-files --others --exclude-standard -- . ':(exclude)subpixel/build/**')" ;;
+        *)
+            test -z "$(git -C "$checkout" ls-files --others --exclude-standard)" ;;
+    esac
+}
+test -x "$linker"
+grep -Fxq gcc_commit=6294f1d9e7536e5ffcde09d1528c918d63abfef5 "$compiler_source/ick/SOURCE.lock"
+
+if (phase === 'preflight') {
+    for fresh in "$output" "$inputs/bin" "$compiler_source/build" "$compiler_source/stage" "$compiler_source/source" "$leaf/build" "$leaf/subpixel/build" "$aici/subpixel/build" {
+        if test -e "$fresh" { echo "refusing previous output: $fresh" >&2; exit 2 }
+    }
+    mkdir -m 700 "$output"
+    printf 'producer\t0a09edede932ba80feb7f35addede3eb17baf6f3\naici\t5f6abcc9185dc960d445e7a567b5441f23973a15\n' > "$output/preflight.tsv"
+    printf '\033[32mPASS\033[0m source identity and fresh host workspace\n'
+    exit 0
+}
+test -s "$output/preflight.tsv"
+
+if (phase === 'bootstrap') {
+    # Declared stage-zero boundary: these tools construct ICK itself.
+    # They never compile consumer/oracle C or the Ike product source.
+    cd -- "$compiler_source"
+    sh ick/materialize.sh gcc source
+    mkdir build stage
+    cd -- "$compiler_source/build"
+    ../source/configure --target=x86_64-linux-gnu --prefix="$compiler_source/stage" \
+        --with-as=/usr/bin/x86_64-linux-gnu-as --with-ld=/usr/bin/x86_64-linux-gnu-ld \
+        --enable-languages=c --disable-bootstrap --disable-multilib --disable-nls \
+        --disable-shared --disable-threads --without-headers --disable-libatomic \
+        --disable-libgomp --disable-libquadmath --disable-libssp --disable-libvtv
+    /usr/bin/make -C "$compiler_source/build" -j2 all-gcc
+    /usr/bin/make -C "$compiler_source/build" install-gcc
+    mkdir "$inputs/bin"
+    "$compiler" -O2 -std=c11 -Wall -Wextra -Werror -pedantic -fPIC \
+        -c "$ike_source/ike.c" -o "$output/ike.o"
+    "$linker" "$output/ike.o" -o "$ike"
+    test "$("$compiler" -dumpmachine)" = x86_64-linux-gnu
+    sha256sum "$compiler" "$output/ike.o" "$ike" > "$output/toolchain.sha256"
+    printf '\033[32mPASS\033[0m ICK built; Ike compiled by ICK and host-linked\n'
+    exit 0
+}
+test -s "$output/toolchain.sha256"
+sha256sum -c "$output/toolchain.sha256"
+var ike_digest = "$(sha256sum "$ike" | cut -d ' ' -f1)"
+
+if (phase === 'producer') {
+    test ! -e "$output/producer.tsv"
+    cd -- "$leaf"
+    env -u IKE_RECIPE_RUNNER ICK_SOURCE_DIR="$compiler_source" ICK_CC="$compiler" \
+        HOST_LINKER="$linker" IKE_BIN="$ike" IKE_SOURCE_DIR="$ike_source" \
+        IKE_EXPECTED_SHA256="$ike_digest" IKE_RECEIPT="$output/producer.tsv" \
+        sh scripts/run-ike.sh preview
+    mkdir "$output/preview"
+    test -s "$leaf/subpixel/build/font-masks.tsv"
+    test -s "$leaf/subpixel/build/font-metrics.tsv"
+    for strategy in baseline quadratic cubic auto {
+        test -s "$leaf/subpixel/build/path-$strategy.ppm"
+        test -s "$leaf/subpixel/build/path-$strategy.tsv"
+    }
+    find "$leaf/subpixel/build" -maxdepth 1 -type f \
+        '(' -name '*.ppm' -o -name 'font-*.tsv' -o -name 'path-*.tsv' ')' \
+        -exec cp '{}' "$output/preview/" '+'
+    cp "$leaf/subpixel/build/ick/path-render" "$leaf/subpixel/build/ick/font-5x7-preview" "$output/preview/"
+    printf '\033[32mPASS\033[0m producer preview through Ike and ICK\n'
+    exit 0
+}
+
+if (phase === 'independent') {
+    test -s "$output/producer.tsv"
+    test ! -e "$output/independent.tsv"
+    cd -- "$aici/subpixel"
+    var independent_digest = "$(sha256sum Ikefile | cut -d ' ' -f1)"
+    var independent_identity = "sha256:$independent_digest"
+    env -u IKE_RECIPE_RUNNER ICK_SOURCE_DIR="$compiler_source" ICK_CC="$compiler" \
+        HOST_LINKER="$linker" LEAF_ROOT="$leaf" \
+        IKE_IKEFILE_IDENTITY="$independent_identity" IKE_RECEIPT="$output/independent.tsv" \
+        "$ike" accept | tee "$output/independent.log"
+    "$grease" "$inputs/kitchen/tasks/subpixel/check-independent-log.grease" "$output/independent.log"
+    ./build/receipt-check "$output/independent.tsv" "$independent_identity"
+    awk '{ if ($0 == "final_result\tPASS") print "final_result\tFAIL"; else print }' "$output/independent.tsv" > "$output/bad-final.tsv"
+    try { ./build/receipt-check "$output/bad-final.tsv" "$independent_identity" > "$output/bad-final.log" 2>&1 }
+    if (_error.code !== 1) { echo 'forged final receipt accepted' >&2; exit 1 }
+    grep -Fq 'AICI_SUBPIXEL_RECEIPT_REJECT final result' "$output/bad-final.log"
+    awk -F '\t' '{ if ($1 == "selected_target_hex") print "selected_target_hex\t00"; else print }' "$output/independent.tsv" > "$output/bad-target.tsv"
+    try { ./build/receipt-check "$output/bad-target.tsv" "$independent_identity" > "$output/bad-target.log" 2>&1 }
+    if (_error.code !== 1) { echo 'forged selected-target receipt accepted' >&2; exit 1 }
+    grep -Fq 'AICI_SUBPIXEL_RECEIPT_REJECT selected target' "$output/bad-target.log"
+    cp build/mutant-3.log build/mutant-5.log build/mutant-plane.log build/mutant-framebuffer.log "$output/"
+    cp build/path-halfwidth.log build/path-overwrite.log build/path-transform.log build/path-cancel.log \
+        build/closed-C.log build/merged-8.log "$output/"
+    printf 'receipt_negatives\tPASS\n' > "$output/receipt-negatives.tsv"
+    printf '\033[32mPASS\033[0m independent rational/path/font oracles, ten defects and receipt negatives\n'
+    exit 0
+}
+
+test -s "$output/producer.tsv"
+test -s "$output/independent.tsv"
+test -s "$output/receipt-negatives.tsv"
+test -s "$output/preview/curve-3x3-vs-5x5.ppm"
+test -s "$output/preview/font-masks.tsv"
+test ! -e "$output/result.tsv"
+printf 'host_baseline\tPASS\nwhole_curve_engine\tPASS\nfont_5x7_samples\tPASS\nconway_bridge\tNOT_QUALIFIED\nproduction_admission\tNOT_ACCEPTED\nmodel_dispatch\tNOT_IMPLEMENTED\nphysical_A1_C67\tNOT_RUN\n' > "$output/result.tsv"
+find "$output" -type f '!' -name result.sha256 -exec sha256sum '{}' '+' > "$output/result.sha256"
+sha256sum -c "$output/result.sha256"
+printf '\033[32mPASS\033[0m pinned subpixel host qualification sealed\n'
