@@ -16,13 +16,20 @@ Ashtray-Archer/az
 ```
 
 Do not fall back to the former `isomorphisms/az` location. The maintained
-phone installation is the built backend at:
+runtime may be the Cat Food stable command under `$CATFOOD_ROOT/bin/az`
+(workbench) or `~/opt/bin/az` (packaged runtime), or the Termux-installed
+source under `$PREFIX/bin/az`.
 
-```sh
-$PREFIX/bin/az
-```
+When `AZ_BIN` is set, it takes precedence and **does not require**
+`PREFIX`. A direct installed AZ source requires the exact reviewed Git
+blob in `AZ_EXPECTED_BLOB`; a Cat Food stable workbench command is admitted
+only when its canonical AZ checkout, HEAD and working bytes agree (and the
+optional `AZ_EXPECTED_BLOB` agrees). The Cat Food stable wrapper is executed
+directly, since it already invokes Grease. A directly installed AZ script is
+interpreted by Grease. Neither an arbitrary file named `az` nor an unverified
+Termux executable is sufficient.
 
-and it is invoked through Grease:
+For a direct Termux installation, the syntax is:
 
 ```sh
 grease "$PREFIX/bin/az" doctor
@@ -38,9 +45,17 @@ The maintained Kitchen entry point is:
 sh tasks/product-lookup/amazon-az.sh search "MIRO A1 LCD digitizer screen assembly"
 ```
 
-It accepts only the known AZ commands `doctor`, `search`, `price`,
-`history`, and `link`, then forwards the arguments unchanged through Grease
-to the exact local AZ backend.
+It accepts only `doctor`, `search`, `price`, `history`, and `link`,
+passes each argument unchanged, refuses absent Grease or unverified executable
+identity, and preserves the AZ exit status and standard streams. The search TSV
+contains **unverified** ASIN candidates; a tagged link is not product-fit,
+price or stock evidence. See AZ's `AZ_SEARCH_STATUS_FILE` and the named
+Flexible Pipes `amazon-product-lookup` for product-fit gating and receipts.
+
+Offline wrapper/location fixture tests: `sh tests/amazon-az-contract.sh`.
+Those tests use a fake Grease interpreter to check Kitchen dispatch, **not**
+to certify the real AZ/Grease runtime. The provider and cross-repository
+integration require separate exact-source execution.
 
 ## AbeBooks lowest used result by ISBN
 
