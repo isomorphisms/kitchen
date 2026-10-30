@@ -93,4 +93,12 @@ esac
 
 printf 'kitchen amazon-az: verified az_blob=%s az_bin=%s grease=%s\n' \
     "$actual" "$az_bin" "$grease" >&2
+
+# Cat Food's stable executable is already a reviewed Grease-launch wrapper.
+# Launch it as a command, not as Grease source (which would double-interpret
+# the wrapper). For directly installed AZ scripts, Grease owns interpretation.
+if [ -n "$verified_source" ]; then
+    [ -x "$az_bin" ] || fail "Cat Food AZ command is not executable"
+    exec "$az_bin" "$@"
+fi
 exec "$grease" "$az_bin" "$@"
