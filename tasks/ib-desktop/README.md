@@ -1,3 +1,9 @@
+# Current continuation — November 15, 2026
+
+The current delivered-native checker is `12.grease`, invoked through its `run` mode and Ike. It consumes the authenticated current ICK archive and original producer receipts, qualifies its literal C dialect on the consuming host, and executes the maintained 46-case Idriç/C ABI program. The actual run passed native mutation, missing-library, recovery and Unicode relocation controls. This is Linux generated-program/FFI evidence; compiled-byte reproducibility and complete desktop acceptance remain separate.
+
+`10` and `11` preserve earlier delivery assumptions and the observed package-metadata failure. `12-attempt.md` records the exact successful and failing controls. All original recipes remain intact below. The FP native-foundation registration now accepts explicit material and receipt identities and calls the selected native checker directly; `pipeline.grease` is the historical first-wave adapter.
+
 # IB Linux first-wave recipes
 
 Current source checker: 7.grease. Current generated-program/native checker:
