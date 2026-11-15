@@ -15,3 +15,4 @@ jobs:
           git rev-parse HEAD
           sh tests/ib-durable-store.sh
           sh tests/source-handoff.sh
+          sh tests/source-handoff-attempts.sh

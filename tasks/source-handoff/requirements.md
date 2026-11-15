@@ -31,6 +31,13 @@ rewrites or includes. Verify the checkout root, including linked worktrees.
 Never reset, switch, clean, clone into an existing directory, register, provision,
 or mutate source/user files. Keep Cat Food as the sole checkout inventory.
 
+Stage the complete contracted-file manifest before extraction and independently
+prove that every contracted row is present exactly once. Stage extracted bytes,
+captured stdout/stderr/status and the emitted handoff unit before finalizing
+them. A partial emitted unit is never accepted as runnable: only output ending
+in `source-handoff-unit=COMPLETE` is complete. Cleanup remains limited to the
+invocation's private scratch directory.
+
 Test the generated command twice from outside Git, positive and failure paths,
 including parent errexit survival. Verify dirty bytes, untracked files, HEAD and
 pre-existing partial directories survive. Mutants must fail before emission for

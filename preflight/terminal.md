@@ -2,7 +2,10 @@
 
 Apply this preflight before presenting any runnable command, including tests.
 Source-dependent POSIX test handoffs must also pass the executable
-`tasks/source-handoff/1.sh` producer gate. Prose checks cannot replace it.
+`tasks/source-handoff/2.sh` producer gate. Prose checks cannot replace it.
+The A1 diagnostic/source-test preparation additionally requires the exact
+material binding from `tasks/android-diagnostic/prepare.pi`; its blocked action
+must not be served through an older candidate or receipt.
 
 ## Context
 

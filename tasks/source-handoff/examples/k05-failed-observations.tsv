@@ -1,0 +1,5 @@
+attempt	stage_id	actor	observation	evidence_validity	exit	signal	command	source_identity	producer_digest	log_digest	native_code	detail
+1	setup	kitchen	FAIL	VALID	74	-	prepare-source	1111111111111111111111111111111111111111	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb	setup_failed	source preparation failed
+1	execution	test-runner	NOT_RUN	VALID	-	-	run-selected-test	1111111111111111111111111111111111111111	-	-	blocked_by_setup	dependent stage did not run
+1	postcondition	kitchen	NOT_RUN	VALID	-	-	check-marker	1111111111111111111111111111111111111111	-	-	blocked_by_execution	dependent stage did not run
+1	reporting	kitchen	NOT_RUN	VALID	-	-	report-receipt	1111111111111111111111111111111111111111	-	-	blocked_by_postcondition	dependent stage did not run

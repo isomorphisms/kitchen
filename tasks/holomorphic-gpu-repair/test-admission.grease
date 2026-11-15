@@ -1,0 +1,48 @@
+#!/usr/bin/env grease
+set -o errexit -o nounset -o pipefail
+if (int($#) !== 4) { echo 'requires ABSOLUTE_GREASE ABSOLUTE_RECIPE ABSOLUTE_VALID_CONTEXT ABSOLUTE_NEW_FIXTURES' >&2; exit 2 }
+var grease = $1
+var recipe = $2
+var valid = $3
+var fixtures = $4
+test ! -e "$fixtures"
+mkdir -m 700 "$fixtures"
+
+try { "$grease" "$recipe" preflight relative-context > "$fixtures/relative.log" 2>&1 }
+if (_error.code !== 2) { echo 'relative-context refusal failed' >&2; exit 1 }
+grep -Fxq 'absolute run context required' "$fixtures/relative.log"
+
+try { "$grease" "$recipe" unknown "$valid" > "$fixtures/unknown.log" 2>&1 }
+if (_error.code !== 2) { echo 'unknown-phase refusal failed' >&2; exit 1 }
+grep -Fxq 'unknown holomorphic repair phase' "$fixtures/unknown.log"
+
+mkdir "$fixtures/missing"
+try { "$grease" "$recipe" preflight "$fixtures/missing" > "$fixtures/missing.log" 2>&1 }
+if (_error.code === 0) { echo 'missing handoff accepted' >&2; exit 1 }
+test ! -e "$fixtures/missing/output"
+
+mkdir "$fixtures/wrong-tool"
+cp "$valid/sources.tsv" "$fixtures/wrong-tool/sources.tsv"
+awk -F '\t' 'BEGIN { OFS="\t" } $1 == "grease" { $3="0000000000000000000000000000000000000000000000000000000000000000" } { print }' \
+    "$valid/tools.tsv" > "$fixtures/wrong-tool/tools.tsv"
+awk -v sources="$valid/sources.tsv" -v tools="$valid/tools.tsv" '$2 != sources && $2 != tools { print }' \
+    "$valid/materials.sha256" > "$fixtures/wrong-tool/materials.sha256"
+sha256sum "$fixtures/wrong-tool/sources.tsv" "$fixtures/wrong-tool/tools.tsv" >> "$fixtures/wrong-tool/materials.sha256"
+try { "$grease" "$recipe" preflight "$fixtures/wrong-tool" > "$fixtures/wrong-tool.log" 2>&1 }
+if (_error.code === 0) { echo 'wrong executable identity accepted' >&2; exit 1 }
+grep -Eq '^(tool digest mismatch|ambiguous tool digest):' "$fixtures/wrong-tool.log"
+test ! -e "$fixtures/wrong-tool/output"
+
+mkdir "$fixtures/changed-material"
+cp "$valid/sources.tsv" "$fixtures/changed-material/sources.tsv"
+cp "$valid/tools.tsv" "$fixtures/changed-material/tools.tsv"
+awk -v sources="$valid/sources.tsv" -v tools="$valid/tools.tsv" '$2 != sources && $2 != tools { print }' \
+    "$valid/materials.sha256" > "$fixtures/changed-material/materials.sha256"
+sha256sum "$fixtures/changed-material/sources.tsv" "$fixtures/changed-material/tools.tsv" >> "$fixtures/changed-material/materials.sha256"
+printf 'mutation\t/missing\t0\n' >> "$fixtures/changed-material/tools.tsv"
+try { "$grease" "$recipe" preflight "$fixtures/changed-material" > "$fixtures/changed-material.log" 2>&1 }
+if (_error.code === 0) { echo 'changed input material accepted' >&2; exit 1 }
+grep -Fq FAILED "$fixtures/changed-material.log"
+test ! -e "$fixtures/changed-material/output"
+
+printf '\033[32mPASS\033[0m relative, unknown, missing, wrong-tool and changed-material refusals\n'

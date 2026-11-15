@@ -1,0 +1,14 @@
+retained-oracle:
+	"$HOLO_GREASE" "$HOLO_KITCHEN_RECIPE" recipe-retained "$HOLO_CONTEXT"
+
+independent-checker:
+	"$HOLO_GREASE" "$HOLO_KITCHEN_RECIPE" recipe-checker "$HOLO_CONTEXT"
+
+producer-field:
+	"$HOLO_GREASE" "$HOLO_KITCHEN_RECIPE" recipe-producer "$HOLO_CONTEXT"
+
+independent-field:
+	"$HOLO_GREASE" "$HOLO_KITCHEN_RECIPE" recipe-compare "$HOLO_CONTEXT"
+
+generated-compiler:
+	"$HOLO_GREASE" "$HOLO_KITCHEN_RECIPE" recipe-generated "$HOLO_CONTEXT"

@@ -1,0 +1,66 @@
+#!/usr/bin/env grease
+# Build/install/installed-test only. No source acquisition or compiler bootstrap.
+if (int($#) < 8) {
+  echo 'usage: 1.grease MODE CLI_ROOT CLI_HEAD IDRIC_BIN ICK_BIN ICU_ROOT ICU_HEAD PROGRAM [INSTALL_PREFIX]' >&2
+  exit 2
+}
+var mode = $1
+var repo = $2
+var expected_head = $3
+var compiler = $4
+var ick = $5
+var icu = $6
+var icu_head = $7
+var program = $8
+if (not repo.startsWith('/') or not compiler.startsWith('/') or
+    not ick.startsWith('/') or not icu.startsWith('/') or
+    not program.startsWith('/')) {
+  echo 'all checkout, compiler, ICU, ICK and program paths must be absolute' >&2
+  exit 2
+}
+test "$(uname -s)" = Linux
+test "$(uname -m)" = x86_64
+test -d "$repo/.git"
+test -d "$icu/.git"
+test -x "$compiler"
+test -x "$ick"
+test -f "$repo/nhtsa-vin.ipkg"
+test -f "$repo/checkpoints/nhtsa/idric/Nhtsa.idric"
+test -f "$icu/native/transport.c"
+test "$(git -C "$repo" rev-parse HEAD)" = "$expected_head"
+test "$(git -C "$icu" rev-parse HEAD)" = "$icu_head"
+"$compiler" --version
+"$ick" --version
+
+if (mode === 'preflight') {
+  echo 'PASS: source identities and tool executables present; libraries not yet compiled'
+  exit 0
+} elif (mode === 'build') {
+  # contrib, idric_net and icu_response must already be installed for this
+  # compiler and IDRIS2_PREFIX. Build failures remain failures.
+  make -C "$repo" nhtsa-vin "IDRIC=$compiler" "ICK=$ick" "ICU_ROOT=$icu"
+  test -x "$repo/build/exec/nhtsa-vin"
+  test -s "$repo/build/exec/nhtsa-vin_app/libicu_transport.so"
+  sha256sum "$repo/checkpoints/nhtsa/idric/Nhtsa.idric" "$repo/build/exec/nhtsa-vin" "$repo/build/exec/nhtsa-vin_app/libicu_transport.so"
+} elif (mode === 'install') {
+  if (int($#) !== 9) { echo 'install requires exactly one absolute install prefix' >&2; exit 2 }
+  var prefix = $9
+  if (not prefix.startsWith('/')) { echo 'install prefix must be absolute' >&2; exit 2 }
+  make -C "$repo" install-nhtsa-vin "PREFIX=$prefix"
+  test -s "$prefix/bin/nhtsa-vin_app/libicu_transport.so"
+  test -x "$prefix/bin/nhtsa-vin"
+  sha256sum "$prefix/bin/nhtsa-vin" "$prefix/bin/nhtsa-vin_app/libicu_transport.so"
+} elif (mode === 'test') {
+  test -x "$repo/build/exec/nhtsa-vin"
+  test -x "$program"
+  cmp "$repo/build/exec/nhtsa-vin" "$program"
+  test -s "$(dirname -- "$program")/nhtsa-vin_app/libicu_transport.so"
+  make -C "$repo" nhtsa-vin-test "NHTSA_PROGRAM=$program"
+  var temporary = "$(mktemp -d)"
+  cd -- "$temporary"
+  "$program" --version
+  sha256sum "$program"
+} else {
+  echo 'mode must be preflight, build, install, or test' >&2
+  exit 2
+}

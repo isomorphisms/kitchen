@@ -1,0 +1,41 @@
+#!/usr/bin/env grease
+set -o errexit -o nounset -o pipefail
+if (int($#) !== 7) { echo 'requires SOURCE HEAD COMPILER_ROOT IKE IKE_SOURCE GREASE EVIDENCE' >&2; exit 2 }
+var source = $1
+var head = $2
+var compiler_root = $3
+var ike = $4
+var ike_source = $5
+var grease = $6
+var evidence = $7
+for absolute in "$source" "$compiler_root" "$ike" "$ike_source" "$grease" "$evidence" {
+  case "$absolute" in /*) ;; *) echo 'absolute paths required' >&2; exit 2 ;; esac
+  case "$absolute" in *[[:space:]]*|*\'*) echo 'unsupported path characters' >&2; exit 2 ;; esac
+}
+test "$(uname -sm)" = 'Linux x86_64'
+test "$(git -C "$source" rev-parse HEAD)" = "$head"
+test -z "$(git -C "$source" status --porcelain)"
+test "$(git -C "$compiler_root" rev-parse HEAD)" = 2734ac5a86610eddfab73b1644d72b4ac85a65ee
+test "$(git -C "$ike_source" rev-parse HEAD)" = a92fe68bf8aad8dfcfe9f7a7abd84e07290f7fe0
+test "$(sha256sum "$ike" | cut -d ' ' -f1)" = ecf8b281b4c233aefb61a4720566f24e9d7407108dd3ee5354310475ede7827d
+test "$(git -C "$compiler_root" diff --name-only)" = _/support/Makefile
+test "$(sha256sum "$compiler_root/_/support/Makefile" | cut -d ' ' -f1)" = 90a441eeb288219623279e78e2cadd98c688041593288973df18583d0c47cc65
+test -x "$compiler_root/build/exec/idris2"
+test -x "$grease"
+test ! -e "$evidence"
+mkdir -m 700 "$evidence"
+printf 'source_head\t%s\ncompiler_head\t%s\nike_head\t%s\n' "$head" \
+  2734ac5a86610eddfab73b1644d72b4ac85a65ee a92fe68bf8aad8dfcfe9f7a7abd84e07290f7fe0 > "$evidence/identity.tsv"
+printf 'bootstrap_overlay\tcanonical-owner-chez-support-defaults\nbootstrap_overlay_sha256\t90a441eeb288219623279e78e2cadd98c688041593288973df18583d0c47cc65\npristine_compiler_bootstrap\tNO\n' >> "$evidence/identity.tsv"
+sha256sum "$0" "$grease" "$ike" "$compiler_root/build/exec/idris2" "$compiler_root/_/support/Makefile" > "$evidence/materials.sha256"
+# Canonical Idriç is explicitly requested; this is its host Chez codegen lane.
+# No ARM native compilation, instruction execution or device claim is made.
+cat > "$evidence/Ikefile" <<EOF
+qualify depends on
+    cd '$source'; env PATH='$compiler_root/.tools/bin:$PATH' IDRIS2_PREFIX='$compiler_root/_/build/env' '$compiler_root/build/exec/idris2' --build english-a32.ipkg > '$evidence/compiler.log' 2>&1
+    cd '$source'; env A32_BINARY='$source/build/exec/english-a32' EXPECTED_SOURCE_SHA='$head' node --test research/a32-typed/test-a32.mjs > '$evidence/tests.log' 2>&1
+EOF
+var identity = "sha256:$(sha256sum "$evidence/Ikefile" | cut -d ' ' -f1)"
+cd -- "$evidence"
+env IKE_RECIPE_RUNNER="$grease" IKE_RECEIPT="$evidence/ike.tsv" IKE_IKEFILE_IDENTITY="$identity" "$ike" qualify
+printf '\033[32mPASS\033[0m exact-head Idriç build and real binary parser tests\n'

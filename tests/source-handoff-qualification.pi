@@ -1,0 +1,352 @@
+"""Independent fixtures for exact requirement/control preparation binding."""
+from argparse import ArgumentParser
+from pathlib import Path
+from builtins import ValueError, dict, list
+import hashlib
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+def fail(message ∈ str) → None:
+    raise ValueError(message)
+
+
+def digest(path ∈ Path) → str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def write_lines(path ∈ Path, lines ∈ list[str]) → None:
+    joined ∈ str ← "\n".join(lines)
+    path.write_text(joined + "\n")
+
+
+def preparation(path ∈ Path, requirement_sha ∈ str) → None:
+    write_lines(path, [
+        "schema\tkitchen-a1-preparation-v1",
+        "request_id\ta1-c67",
+        "target\tphone",
+        "device_instance\ta1-one",
+        "operation\tdiagnostic-shizuku",
+        "selected_action\tsource-test",
+        "selected_status\tREADY",
+        "selected_reason\tMATERIAL_BOUND",
+        "requirement_projection_sha256\t" + requirement_sha,
+        "action\tsource-test\tREADY\tMATERIAL_BOUND\ttemporary source test records its exact scope",
+        "action\tfreshness-check\tREADY\tREAD_ONLY_REPEAT_ALLOWED\tcurrent facts are observed without mutation",
+        "action\tdiagnostic-capture\tBLOCKED\tSHIZUKU_SERVICE_NOT_READY\tno diagnostic effect",
+        "action\texport-copy\tBLOCKED\tSHIZUKU_EXPORT_MISSING\tno copy effect",
+        "acceptance\tSOURCE_ONLY\tphysical identity authority service and device behavior remain unverified"
+    ])
+
+
+def selection(
+    path ∈ Path,
+    candidate ∈ Path,
+    verifier ∈ Path,
+    requirement_sha ∈ str,
+    source_role ∈ str,
+    destination_role ∈ str,
+    omit_negative ∈ bool
+) → None:
+    lines ∈ list[str] ← [
+        "schema\taici-requirement-control-selection-v1",
+        "request_id\ta1-c67",
+        "task\tsource-handoff",
+        "target\tphone",
+        "scope\tbaseline",
+        "parameters_sha256\tbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "source_role\t" + source_role,
+        "destination_role\t" + destination_role,
+        "candidate_role\tcomplete-source-handoff-unit",
+        "candidate_sha256\t" + digest(candidate),
+        "requirement_projection_sha256\t" + requirement_sha,
+        "verifier_owner\tisomorphisms/ai-ci",
+        "verifier_revision\tcccccccccccccccccccccccccccccccccccccccc",
+        "verifier_sha256\t" + digest(verifier),
+        "verifier_interface\taici-control-qualification-v1",
+        "review_status\tapproved",
+        "requirement\treq-exact-candidate\trequired\texact served bytes\tsource",
+        "requirement\treq-live-effect\texcluded\tdownstream owner\tlive",
+        "control\tcontrol-positive\treq-exact-candidate\tpositive\tPASS\tsource"
+    ]
+    if omit_negative == False:
+        lines.append("control\tcontrol-negative\treq-exact-candidate\tnegative\tREJECTED\tfixture")
+    write_lines(path, lines)
+
+
+def evidence(
+    path ∈ Path,
+    directory ∈ Path,
+    candidate ∈ Path,
+    positive_execution ∈ str,
+    positive_status ∈ str,
+    scope ∈ str,
+    omit_negative ∈ bool
+) → None:
+    stem ∈ str ← str(path.stem)
+    positive ∈ Path ← directory.joinpath(stem + "-positive.txt")
+    negative ∈ Path ← directory.joinpath(stem + "-negative.txt")
+    positive.write_text("independent source control observed candidate bytes\n")
+    negative.write_text("independent forged marker control rejected\n")
+    lines ∈ list[str] ← [
+        "schema\taici-executed-control-evidence-v1",
+        "candidate_sha256\t" + digest(candidate),
+        "parameters_sha256\tbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "target\tphone",
+        "scope\t" + scope,
+        "result\tcontrol-positive\treq-exact-candidate\t" + positive_execution + "\t" + positive_status + "\t" + digest(candidate) + "\tbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\tphone\tsource\t" + str(positive) + "\t" + digest(positive)
+    ]
+    if omit_negative == False:
+        lines.append("result\tcontrol-negative\treq-exact-candidate\texecuted\tREJECTED\t" + digest(candidate) + "\tbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\tphone\tfixture\t" + str(negative) + "\t" + digest(negative))
+    write_lines(path, lines)
+
+
+def command(
+    ithon ∈ str,
+    qualifier ∈ Path,
+    mode ∈ str,
+    preparation_path ∈ Path,
+    selection_path ∈ Path,
+    evidence_path ∈ Path,
+    candidate ∈ Path,
+    verifier ∈ Path,
+    output ∈ Path
+) → list[str]:
+    return [
+        ithon, str(qualifier), mode,
+        "--preparation", str(preparation_path),
+        "--selection", str(selection_path),
+        "--evidence", str(evidence_path),
+        "--candidate", str(candidate),
+        "--verifier", str(verifier),
+        "--ithon", ithon,
+        "--output", str(output)
+    ]
+
+
+def invoke(arguments ∈ list[str], cwd ∈ Path) → subprocess.CompletedProcess:
+    environment ∈ dict[str, str] ← dict(os.environ)
+    return subprocess.run(arguments, capture_output=True, cwd=str(cwd), env=environment)
+
+
+def expect_pass(arguments ∈ list[str], cwd ∈ Path, label ∈ str) → subprocess.CompletedProcess:
+    child ∈ subprocess.CompletedProcess ← invoke(arguments, cwd)
+    code ∈ int ← child.returncode
+    if code != 0:
+        stderr ∈ str ← child.stderr.decode()
+        fail(label + " unexpectedly failed: " + stderr)
+    return child
+
+
+def expect_reject(arguments ∈ list[str], cwd ∈ Path, diagnostic ∈ str, label ∈ str) → None:
+    child ∈ subprocess.CompletedProcess ← invoke(arguments, cwd)
+    code ∈ int ← child.returncode
+    if code == 0:
+        fail(label + " unexpectedly passed")
+    stderr ∈ str ← child.stderr.decode()
+    diagnostic_index ∈ int ← stderr.find(diagnostic)
+    if diagnostic_index < 0:
+        fail(label + " wrong diagnostic: " + stderr)
+
+
+def case_files(
+    directory ∈ Path,
+    name ∈ str,
+    candidate ∈ Path,
+    verifier ∈ Path,
+    requirement_sha ∈ str,
+    source_role ∈ str,
+    destination_role ∈ str,
+    omit_negative ∈ bool,
+    positive_execution ∈ str,
+    positive_status ∈ str,
+    scope ∈ str
+) → tuple[Path, Path]:
+    selected ∈ Path ← directory.joinpath(name + "-selection.tsv")
+    observed ∈ Path ← directory.joinpath(name + "-evidence.tsv")
+    selection(selected, candidate, verifier, requirement_sha, source_role, destination_role, omit_negative)
+    evidence(observed, directory, candidate, positive_execution, positive_status, scope, omit_negative)
+    return (selected, observed)
+
+
+def main() → None:
+    parser ∈ ArgumentParser ← ArgumentParser()
+    parser.add_argument("--ithon", required=True)
+    args ∈ object ← parser.parse_args()
+    ithon ∈ str ← args.ithon
+    source_name ∈ str ← sys._getframe().f_code.co_filename
+    root ∈ Path ← Path(source_name).resolve().parents.__getitem__(1)
+    qualifier ∈ Path ← root.joinpath("tasks/source-handoff/qualify.pi")
+    verifier ∈ Path ← root.joinpath("tests/fixtures/source-handoff-qualification/aici-verifier.pi")
+    temporary_name ∈ str ← tempfile.mkdtemp(prefix="kitchen qualification ")
+    temporary ∈ Path ← Path(temporary_name)
+    outside ∈ Path ← temporary.joinpath("unrelated whitespace")
+    outside.mkdir()
+    checked ∈ int ← 0
+    requirement_sha ∈ str ← "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    try:
+        prepared ∈ Path ← temporary.joinpath("preparation.tsv")
+        preparation(prepared, requirement_sha)
+        candidate ∈ Path ← temporary.joinpath("served candidate")
+        write_lines(candidate, [
+            "candidate diagnostic text: PASS strings do not qualify controls",
+            "if sh /absolute/source-handoff/2.sh run; then true; fi",
+            "# source-handoff-unit=COMPLETE"
+        ])
+        good_paths ∈ tuple[Path, Path] ← case_files(
+            temporary, "good", candidate, verifier, requirement_sha,
+            "copy", "move", False, "executed", "PASS", "baseline"
+        )
+        good_selection ∈ Path ← good_paths.__getitem__(0)
+        good_evidence ∈ Path ← good_paths.__getitem__(1)
+        good_output ∈ Path ← temporary.joinpath("qualified.tsv")
+        good_command ∈ list[str] ← command(
+            ithon, qualifier, "prepare", prepared, good_selection,
+            good_evidence, candidate, verifier, good_output
+        )
+        expect_pass(good_command, outside, "exact candidate and controls")
+        verify_command ∈ list[str] ← command(
+            ithon, qualifier, "verify", prepared, good_selection,
+            good_evidence, candidate, verifier, good_output
+        )
+        expect_pass(verify_command, outside, "unchanged qualified preparation")
+        checked ← checked + 2
+
+        equal_output ∈ Path ← temporary.joinpath("qualified-equal.tsv")
+        equal_command ∈ list[str] ← command(
+            ithon, qualifier, "prepare", prepared, good_selection,
+            good_evidence, candidate, verifier, equal_output
+        )
+        expect_pass(equal_command, outside, "deterministic repeat")
+        good_bytes ∈ bytes ← good_output.read_bytes()
+        equal_bytes ∈ bytes ← equal_output.read_bytes()
+        if good_bytes != equal_bytes:
+            fail("equal material changed qualified preparation")
+        checked ← checked + 1
+
+        served_b ∈ Path ← temporary.joinpath("served-b")
+        candidate_bytes ∈ bytes ← candidate.read_bytes()
+        served_b.write_bytes(candidate_bytes + b"# rewrite\n")
+        served_b_command ∈ list[str] ← command(
+            ithon, qualifier, "prepare", prepared, good_selection,
+            good_evidence, served_b, verifier, temporary.joinpath("served-b.tsv")
+        )
+        expect_reject(served_b_command, outside, "SERVED_CANDIDATE_CHANGED", "tested A served B")
+        checked ← checked + 1
+
+        omitted_paths ∈ tuple[Path, Path] ← case_files(
+            temporary, "omitted", candidate, verifier, requirement_sha,
+            "copy", "move", True, "executed", "PASS", "baseline"
+        )
+        omitted_command ∈ list[str] ← command(
+            ithon, qualifier, "prepare", prepared, omitted_paths.__getitem__(0),
+            omitted_paths.__getitem__(1), candidate, verifier, temporary.joinpath("omitted.tsv")
+        )
+        expect_reject(omitted_command, outside, "lacks positive or negative control", "omitted negative control")
+        checked ← checked + 1
+
+        unexecuted_paths ∈ tuple[Path, Path] ← case_files(
+            temporary, "unexecuted", candidate, verifier, requirement_sha,
+            "copy", "move", False, "not-run", "PASS", "baseline"
+        )
+        unexecuted_command ∈ list[str] ← command(
+            ithon, qualifier, "prepare", prepared, unexecuted_paths.__getitem__(0),
+            unexecuted_paths.__getitem__(1), candidate, verifier, temporary.joinpath("unexecuted.tsv")
+        )
+        expect_reject(unexecuted_command, outside, "selected control was not executed", "unexecuted control")
+        checked ← checked + 1
+
+        role_paths ∈ tuple[Path, Path] ← case_files(
+            temporary, "wrong-role", candidate, verifier, requirement_sha,
+            "move", "copy", False, "executed", "PASS", "baseline"
+        )
+        role_command ∈ list[str] ← command(
+            ithon, qualifier, "prepare", prepared, role_paths.__getitem__(0),
+            role_paths.__getitem__(1), candidate, verifier, temporary.joinpath("wrong-role.tsv")
+        )
+        expect_reject(role_command, outside, "wrong copy or move role", "wrong copy move roles")
+        checked ← checked + 1
+
+        stale_paths ∈ tuple[Path, Path] ← case_files(
+            temporary, "stale", candidate, verifier, "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "copy", "move", False, "executed", "PASS", "baseline"
+        )
+        stale_command ∈ list[str] ← command(
+            ithon, qualifier, "prepare", prepared, stale_paths.__getitem__(0),
+            stale_paths.__getitem__(1), candidate, verifier, temporary.joinpath("stale.tsv")
+        )
+        expect_reject(stale_command, outside, "SELECTION_REQUIREMENTS_CHANGED", "stale correction")
+        checked ← checked + 1
+
+        scope_paths ∈ tuple[Path, Path] ← case_files(
+            temporary, "scope", candidate, verifier, requirement_sha,
+            "copy", "move", False, "executed", "PASS", "repaired-feature"
+        )
+        scope_command ∈ list[str] ← command(
+            ithon, qualifier, "prepare", prepared, scope_paths.__getitem__(0),
+            scope_paths.__getitem__(1), candidate, verifier, temporary.joinpath("scope.tsv")
+        )
+        expect_reject(scope_command, outside, "evidence binding changed scope", "wrong scope")
+        checked ← checked + 1
+
+        refuse_paths ∈ tuple[Path, Path] ← case_files(
+            temporary, "always-refuse", candidate, verifier, requirement_sha,
+            "copy", "move", False, "executed", "REJECTED", "baseline"
+        )
+        refuse_command ∈ list[str] ← command(
+            ithon, qualifier, "prepare", prepared, refuse_paths.__getitem__(0),
+            refuse_paths.__getitem__(1), candidate, verifier, temporary.joinpath("always-refuse.tsv")
+        )
+        expect_reject(refuse_command, outside, "result differs from required observation", "always refusing candidate")
+        checked ← checked + 1
+
+        formatted ∈ Path ← temporary.joinpath("served candidate formatted")
+        write_lines(formatted, [
+            "candidate diagnostic text: PASS strings do not qualify controls",
+            "",
+            "if sh /absolute/source-handoff/2.sh run; then true; fi",
+            "# harmless formatting changed and qualification reran",
+            "# source-handoff-unit=COMPLETE"
+        ])
+        formatted_paths ∈ tuple[Path, Path] ← case_files(
+            temporary, "formatted", formatted, verifier, requirement_sha,
+            "copy", "move", False, "executed", "PASS", "baseline"
+        )
+        formatted_output ∈ Path ← temporary.joinpath("formatted-qualified.tsv")
+        formatted_command ∈ list[str] ← command(
+            ithon, qualifier, "prepare", prepared, formatted_paths.__getitem__(0),
+            formatted_paths.__getitem__(1), formatted, verifier, formatted_output
+        )
+        expect_pass(formatted_command, outside, "newly qualified formatting change")
+        formatted_bytes ∈ bytes ← formatted_output.read_bytes()
+        original_bytes ∈ bytes ← good_output.read_bytes()
+        if formatted_bytes == original_bytes:
+            fail("changed candidate retained old qualification bytes")
+        checked ← checked + 1
+
+        incomplete ∈ Path ← temporary.joinpath("incomplete candidate")
+        incomplete.write_text("partial source-handoff bytes\n")
+        incomplete_paths ∈ tuple[Path, Path] ← case_files(
+            temporary, "incomplete", incomplete, verifier, requirement_sha,
+            "copy", "move", False, "executed", "PASS", "baseline"
+        )
+        incomplete_command ∈ list[str] ← command(
+            ithon, qualifier, "prepare", prepared, incomplete_paths.__getitem__(0),
+            incomplete_paths.__getitem__(1), incomplete, verifier, temporary.joinpath("incomplete.tsv")
+        )
+        expect_reject(incomplete_command, outside, "SERVED_CANDIDATE_INCOMPLETE", "incomplete served unit")
+        checked ← checked + 1
+
+        positive_file ∈ Path ← temporary.joinpath("good-evidence-positive.txt")
+        positive_file.write_text("changed after qualification\n")
+        expect_reject(verify_command, outside, "result evidence bytes changed", "changed executed evidence")
+        checked ← checked + 1
+    finally:
+        shutil.rmtree(temporary_name)
+    print("PASS", checked, "exact requirement/control qualification cases")
+
+
+main()

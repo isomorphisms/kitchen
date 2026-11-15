@@ -1,0 +1,44 @@
+#!/usr/bin/env grease
+# Idriç Amazon.jobs: build only on an already-provisioned host, never acquire tools.
+if (int($#) !== 5) {
+  echo 'usage: 2.grease MODE ABSOLUTE_CLI_ROOT CLI_HEAD IDRIC_BIN PROGRAM_PATH' >&2
+  exit 2
+}
+var mode = $1
+var repo = $2
+var expected = $3
+var compiler = $4
+var program = $5
+if (not repo.startsWith('/') or not compiler.startsWith('/') or not program.startsWith('/')) {
+  echo 'all paths must be absolute' >&2
+  exit 2
+}
+test "$(uname -s)" = Linux
+test "$(uname -m)" = x86_64
+test -d "$repo/.git"
+test -x "$compiler"
+test -f "$repo/checkpoints/amazon-jobs/AmazonJobs.idric"
+test "$(git -C "$repo" rev-parse HEAD)" = "$expected"
+"$compiler" --version
+
+if (mode === 'preflight') {
+  exit 0
+} elif (mode === 'build') {
+  cd -- "$repo"
+  # contrib must have been provisioned for this exact compiler beforehand.
+  "$compiler" -p contrib checkpoints/amazon-jobs/AmazonJobs.idric -o amazon-jobs
+  test -x build/exec/amazon-jobs
+  build/exec/amazon-jobs --self-test
+  sha256sum checkpoints/amazon-jobs/AmazonJobs.idric build/exec/amazon-jobs
+} elif (mode === 'test') {
+  test -x "$repo/build/exec/amazon-jobs"
+  test -x "$program"
+  test "$(readlink -f "$program")" = "$(readlink -f "$repo/build/exec/amazon-jobs")"
+  var temporary = "$(mktemp -d)"
+  cd -- "$temporary"
+  "$program" --self-test
+  sha256sum "$program"
+} else {
+  echo 'mode must be preflight, build, or test' >&2
+  exit 2
+}

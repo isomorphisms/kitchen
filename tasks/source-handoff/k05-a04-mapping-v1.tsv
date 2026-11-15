@@ -1,0 +1,17 @@
+owner_schema	owner_field	a04_field	mapping
+kitchen-k05-attempt-v1	plan.tsv	plan	exact A04 stage plan columns; independently supplied Git-blob-bound bytes
+kitchen-k05-attempt-v1	attempt	attempt	exact positive decimal attempt identity
+kitchen-k05-attempt-v1	stage_id	stage_id	exact planned stage identifier
+kitchen-k05-attempt-v1	actor	actor	exact planned actor
+kitchen-k05-attempt-v1	observation	observation	exact closed A04 observation vocabulary
+kitchen-k05-attempt-v1	evidence_validity	evidence_validity	exact raw owner declaration; A04 validates independently
+kitchen-k05-attempt-v1	exit	exit	exact decimal or absent marker
+kitchen-k05-attempt-v1	signal	signal	exact signal name or absent marker
+kitchen-k05-attempt-v1	command	command	exact owner command identifier
+kitchen-k05-attempt-v1	source_identity	source_identity	exact Git commit identity bound at begin
+kitchen-k05-attempt-v1	producer_digest	producer_digest	exact SHA-256 or absent marker
+kitchen-k05-attempt-v1	log_digest	log_digest	exact SHA-256 or absent marker
+kitchen-k05-attempt-v1	native_code	native_code	exact owner-native code
+kitchen-k05-attempt-v1	detail	detail	exact owner detail
+kitchen-k05-finalization-v1	state	-	COMPLETE means every selected stage has a raw row; not an aggregate PASS
+kitchen-k05-finalization-v1	missing.tsv	observation	missing selected rows remain absent so A04 renders NOT_RUN/INCOMPLETE/absent_receipt

@@ -1,0 +1,135 @@
+#!/usr/bin/env grease
+# Target: disposable Ubuntu 24.04 x86_64 build host. No device execution.
+set -o errexit -o nounset -o pipefail
+if (int($#) !== 6) { echo 'requires LEAF AICI IKE_SOURCE ICK GREASE NEW_EVIDENCE' >&2; exit 2 }
+var leaf = $1
+var aici = $2
+var ike_source = $3
+var compiler = $4
+var grease = $5
+var evidence = $6
+for path in "$@" {
+    case "$path" in /*) ;; *) echo 'absolute paths required' >&2; exit 2 ;; esac
+}
+test "$(uname -s)" = Linux
+test "$(uname -m)" = x86_64
+test -x "$compiler"
+test -x "$grease"
+test "$(git -C "$ike_source" rev-parse HEAD)" = 93f9eb0aee9094757414df8a7929c89b6a294b0c
+git -C "$leaf" merge-base --is-ancestor 672ea01a7aa6e1d559a1ac55601b65696935caee HEAD
+git -C "$leaf" diff HEAD --exit-code --quiet
+git -C "$aici" diff HEAD --exit-code --quiet
+git -C "$ike_source" diff HEAD --exit-code --quiet
+test ! -e "$evidence"
+test ! -e "$leaf/experiments/exact-beltrami/build"
+mkdir -m 700 "$evidence"
+"$compiler" --version > "$evidence/compiler-version.txt"
+"$compiler" -dumpmachine > "$evidence/compiler-target.txt"
+test "$(cat "$evidence/compiler-target.txt")" = x86_64-pc-linux-gnu
+uname -a > "$evidence/host.txt"
+ldd --version > "$evidence/runtime-version.txt"
+git -C "$leaf" rev-parse HEAD > "$evidence/producer-head.txt"
+git -C "$aici" rev-parse HEAD > "$evidence/aici-head.txt"
+git -C "$ike_source" rev-parse HEAD > "$evidence/ike-head.txt"
+sha256sum "$compiler" "$grease" "$ike_source/ike.c" \
+    "$leaf/experiments/exact-beltrami/beltrami.c" \
+    "$leaf/experiments/exact-beltrami/Ikefile" \
+    "$aici/research/leray-exact-01/accept.c" > "$evidence/inputs.sha256"
+var frontend = "$("$compiler" -print-prog-name=cc1)"
+test -f "$frontend"
+sha256sum "$frontend" > "$evidence/frontend.sha256"
+printf '' | "$compiler" -std=c11 -dM -E - > "$evidence/c11-macros.txt"
+grep -Fxq '#define __STDC_VERSION__ 201112L' "$evidence/c11-macros.txt"
+"$compiler" -fno-link-libatomic -O2 -std=c11 -Wall -Wextra -Werror -pedantic \
+    "$ike_source/ike.c" -o "$evidence/ike"
+var ikefile_hash = "$(sha256sum "$leaf/experiments/exact-beltrami/Ikefile" | cut -d ' ' -f1)"
+cd "$leaf/experiments/exact-beltrami"
+env ICK="$compiler" IKE_RECIPE_RUNNER="$grease" IKE_RECEIPT="$evidence/ike.tsv" \
+    IKE_IKEFILE_IDENTITY="sha256:$ikefile_hash" "$evidence/ike" all > "$evidence/build.stdout" 2> "$evidence/build.stderr"
+cmp build/beltrami build/beltrami-replay
+build/beltrami suite > "$evidence/producer.tsv" 2> "$evidence/producer.stderr"
+build/beltrami-replay suite > "$evidence/replay.tsv" 2> "$evidence/replay.stderr"
+cmp "$evidence/producer.tsv" "$evidence/replay.tsv"
+test ! -s "$evidence/producer.stderr"
+test ! -s "$evidence/replay.stderr"
+"$compiler" -fno-link-libatomic -O2 -std=c11 -Wall -Wextra -Werror -pedantic \
+    -ffp-contract=off "$aici/research/leray-exact-01/accept.c" -lm -o "$evidence/accept"
+"$evidence/accept" "$evidence/producer.tsv" > "$evidence/aici.tsv" 2> "$evidence/aici.stderr"
+test ! -s "$evidence/aici.stderr"
+printf 'case\texpected_exit\tobserved_exit\n' > "$evidence/invalid-inputs.tsv"
+# Each refusal must be observed as process exit 2, with no success table.
+for name in negative-nu nan-nu infinity-nu unstable small-grid zero-grid fractional-grid negative-grid huge-grid zero-steps nan-time negative-time huge-work trailing-parameter {
+    var args = []
+    case "$name" in
+        negative-nu)
+            setvar args = :| run 16 20 -1 1 |
+            ;;
+        nan-nu)
+            setvar args = :| run 16 20 nan 1 |
+            ;;
+        infinity-nu)
+            setvar args = :| run 16 20 inf 1 |
+            ;;
+        unstable)
+            setvar args = :| run 64 1 10 1 |
+            ;;
+        small-grid)
+            setvar args = :| run 3 20 0.2 1 |
+            ;;
+        zero-grid)
+            setvar args = :| run 0 20 0.2 1 |
+            ;;
+        fractional-grid)
+            setvar args = :| run 16.5 20 0.2 1 |
+            ;;
+        negative-grid)
+            setvar args = :| run -16 20 0.2 1 |
+            ;;
+        huge-grid)
+            setvar args = :| run 99999999999999999 20 0.2 1 |
+            ;;
+        zero-steps)
+            setvar args = :| run 16 0 0.2 1 |
+            ;;
+        nan-time)
+            setvar args = :| run 16 20 0.2 nan |
+            ;;
+        negative-time)
+            setvar args = :| run 16 20 0.2 -1 |
+            ;;
+        huge-work)
+            setvar args = :| run 4096 2000000 0 1 |
+            ;;
+        trailing-parameter)
+            setvar args = :| run 16 20 0.2 1 extra |
+            ;;
+    esac
+    try { build/beltrami @args > "$evidence/$name.stdout" 2> "$evidence/$name.stderr" }
+    var observed = _error.code
+    test "$observed" -eq 2
+    test ! -s "$evidence/$name.stdout"
+    grep -Fq 'Rejected invalid parameters' "$evidence/$name.stderr"
+    printf '%s\t2\t%s\n' "$name" "$observed" >> "$evidence/invalid-inputs.tsv"
+}
+# Corrupt each reference column separately, as well as observed values and rows.
+printf 'case\texpected_exit\tobserved_exit\n' > "$evidence/corrupted-output.tsv"
+for column in 6 7 8 9 10 11 12 13 14 15 16 17 18 {
+    awk -F '\t' -v OFS='\t' -v col="$column" '{ if (NR==2) $col=$col+0.25; print }' \
+        "$evidence/producer.tsv" > "$evidence/corrupt-$column.tsv"
+    try { "$evidence/accept" "$evidence/corrupt-$column.tsv" > "$evidence/corrupt-$column.stdout" 2> "$evidence/corrupt-$column.stderr" }
+    var observed = _error.code
+    test "$observed" -eq 1
+    printf 'column-%s\t1\t%s\n' "$column" "$observed" >> "$evidence/corrupted-output.tsv"
+}
+head -n 16 "$evidence/producer.tsv" > "$evidence/truncated.tsv"
+try { "$evidence/accept" "$evidence/truncated.tsv" > "$evidence/truncated.stdout" 2> "$evidence/truncated.stderr" }
+test "$[_error.code]" -eq 1
+printf 'truncated\t1\t1\n' >> "$evidence/corrupted-output.tsv"
+ldd build/beltrami > "$evidence/runtime-libraries.txt"
+awk '$2 == "=>" && substr($3,1,1) == "/" { print $3 } substr($1,1,1) == "/" { print $1 }' "$evidence/runtime-libraries.txt" | xargs sha256sum > "$evidence/runtime.sha256"
+test -s "$evidence/runtime.sha256"
+sha256sum build/beltrami build/beltrami-replay "$evidence/ike" "$evidence/accept" \
+    "$evidence/producer.tsv" "$evidence/replay.tsv" "$evidence/aici.tsv" \
+    "$evidence/invalid-inputs.tsv" "$evidence/corrupted-output.tsv" > "$evidence/outputs.sha256"
+printf 'schema\tleray-exact-v1\nproducer_runtime\tPASS\nreproducible_build\tPASS\nreproducible_output\tPASS\nindependent_aici\tPASS\ninvalid_inputs\tPASS\ncorrupted_reference\tPASS\nmerge_authority\tNONE\n' > "$evidence/result.tsv"
+printf '\033[32mPASS\033[0m exact periodic Beltrami host benchmark and independent acceptance\n'

@@ -1,0 +1,23 @@
+retained-oracle depends on
+	"$[ENV.HOLO_GREASE]" "$[ENV.HOLO_KITCHEN_RECIPE]" recipe-retained "$[ENV.HOLO_CONTEXT]"
+
+independent-checker depends on
+	"$[ENV.HOLO_GREASE]" "$[ENV.HOLO_KITCHEN_RECIPE]" recipe-checker "$[ENV.HOLO_CONTEXT]"
+
+producer-field depends on
+	"$[ENV.HOLO_GREASE]" "$[ENV.HOLO_KITCHEN_RECIPE]" recipe-producer "$[ENV.HOLO_CONTEXT]"
+
+independent-field depends on
+	"$[ENV.HOLO_GREASE]" "$[ENV.HOLO_KITCHEN_RECIPE]" recipe-compare "$[ENV.HOLO_CONTEXT]"
+
+generated-compiler depends on
+	"$[ENV.HOLO_GREASE]" "$[ENV.HOLO_KITCHEN_RECIPE]" recipe-generated "$[ENV.HOLO_CONTEXT]"
+
+compiler-bootstrap depends on
+	"$[ENV.HOLO_GREASE]" "$[ENV.HOLO_KITCHEN_RECIPE]" recipe-bootstrap "$[ENV.HOLO_CONTEXT]"
+
+compiler-api depends on
+	"$[ENV.HOLO_GREASE]" "$[ENV.HOLO_KITCHEN_RECIPE]" recipe-api "$[ENV.HOLO_CONTEXT]"
+
+generated-binding depends on
+	"$[ENV.HOLO_GREASE]" "$[ENV.HOLO_KITCHEN_RECIPE]" recipe-binding "$[ENV.HOLO_CONTEXT]"

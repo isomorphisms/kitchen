@@ -1,0 +1,13 @@
+#!/usr/bin/env grease
+set -e
+if (int($#) < 3) { echo 'requires absolute Ithon entrypoint, AI-CI checker and checker arguments' >&2; exit 2 }
+var ithon = $1
+var checker = $2
+if (not ithon.startsWith('/') or not checker.startsWith('/')) {
+  echo 'geometry acceptance requires absolute executable and checker paths' >&2
+  exit 2
+}
+test -x "$ithon"
+test -s "$checker"
+shift 2
+exec "$ithon" "$checker" "$@"

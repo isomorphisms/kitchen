@@ -1,0 +1,514 @@
+"""Prepare A1 source-test and diagnostic actions from exact material inputs."""
+from argparse import ArgumentParser
+from pathlib import Path
+from builtins import dict, int, list
+import hashlib
+import sys
+
+AICI_REQUIREMENT_REVISION ∈ str ← "cdf6f09dda2828e4d463dab202d66175397dbbd4"
+KITCHEN_SOURCE_HANDOFF_REVISION ∈ str ← "ba7f651e89ae25e831613c8c3fee2f15f73baa54"
+KITCHEN_SOURCE_HANDOFF_SHA256 ∈ str ← "cc79e130ddd4a79e0a1d5b2c7be37e8daf68e7aee5452c5616f538aa137833d9"
+APPROVED_OBLIGATIONS_CANDIDATE_HEAD ∈ str ← "7f4a3707a63812af1039ad80aea8ad7e86983670"
+APPROVED_OBLIGATIONS_INTERFACE_SHA256 ∈ str ← "b079f6326ef018e2dce46105f055cc3a237bbb4df42d85b0e550228adacf976d"
+QUALIFIED_ITHON_REVISION ∈ str ← "d6e83969f82512e920fb17b44326cb54f31d015c"
+
+def stop(message ∈ str) → None:
+    sys.exit(message)
+
+def sha256_bytes(data ∈ bytes) → str:
+    return hashlib.sha256(data).hexdigest()
+
+def sha256_file(path ∈ Path) → str:
+    return sha256_bytes(path.read_bytes())
+
+def exact_sha(value ∈ str, label ∈ str) → None:
+    count ∈ int ← value.__len__()
+    lowered ∈ str ← value.lower()
+    if count != 64 or value != lowered:
+        stop(label + ":exact lowercase SHA-256 required")
+
+def exact_revision(value ∈ str, label ∈ str) → None:
+    count ∈ int ← value.__len__()
+    if count != 40:
+        stop(label + ":exact lowercase revision required")
+
+def absolute_file(value ∈ str, label ∈ str) → Path:
+    path ∈ Path ← Path(value)
+    is_absolute ∈ bool ← path.is_absolute()
+    if is_absolute == False:
+        stop(label + "_PATH_NOT_ABSOLUTE")
+    is_file ∈ bool ← path.is_file()
+    if is_file == False:
+        stop(label + "_MISSING")
+    return path
+
+def read_pairs(path ∈ Path, label ∈ str) → dict[str, str]:
+    values ∈ dict[str, str] ← dict()
+    text ∈ str ← path.read_text()
+    lines ∈ list[str] ← text.splitlines()
+    for line in lines:
+        fields ∈ list[str] ← line.split("\t")
+        field_count ∈ int ← fields.__len__()
+        if field_count != 2:
+            stop(label + "_CORRUPT")
+        key ∈ str ← fields.__getitem__(0)
+        if key == "" or values.__contains__(key):
+            stop(label + "_CORRUPT")
+        values.__setitem__(key, fields.__getitem__(1))
+    return values
+
+def read_profile(path ∈ Path) → tuple[dict[str, str], dict[str, dict[str, str]]]:
+    metadata ∈ dict[str, str] ← dict()
+    facts ∈ dict[str, dict[str, str]] ← dict()
+    text ∈ str ← path.read_text()
+    lines ∈ list[str] ← text.splitlines()
+    for line in lines:
+        fields ∈ list[str] ← line.split("\t")
+        field_count ∈ int ← fields.__len__()
+        first ∈ str ← fields.__getitem__(0)
+        if field_count == 3 and first == "meta":
+            key ∈ str ← fields.__getitem__(1)
+            if metadata.__contains__(key):
+                stop("PROFILE_PROJECTION_CONFLICT:" + key)
+            metadata.__setitem__(key, fields.__getitem__(2))
+        elif field_count == 8 and first == "fact":
+            name ∈ str ← fields.__getitem__(1)
+            if facts.__contains__(name):
+                stop("PROFILE_PROJECTION_CONFLICT:" + name)
+            fact ∈ dict[str, str] ← dict()
+            fact.__setitem__("value", fields.__getitem__(2))
+            fact.__setitem__("scope", fields.__getitem__(3))
+            fact.__setitem__("state", fields.__getitem__(4))
+            fact.__setitem__("source", fields.__getitem__(5))
+            fact.__setitem__("source_sha256", fields.__getitem__(6))
+            fact.__setitem__("observed_at", fields.__getitem__(7))
+            facts.__setitem__(name, fact)
+        else:
+            stop("PROFILE_PROJECTION_CORRUPT")
+    schema ∈ str ← metadata.get("schema", "")
+    if schema != "catfood-android-profile-projection-v2":
+        stop("PROFILE_PROJECTION_SCHEMA")
+    required_fields ∈ list[str] ← ["canonical_model", "target", "device_instance", "operation", "profile_material_sha256"]
+    for required in required_fields:
+        required_value ∈ str ← metadata.get(required, "")
+        if required_value == "":
+            stop("PROFILE_PROJECTION_MISSING:" + required)
+    return (metadata, facts)
+
+def read_requirements(path ∈ Path) → tuple[dict[str, str], list[list[str]]]:
+    values ∈ dict[str, str] ← dict()
+    obligations ∈ list[list[str]] ← []
+    text ∈ str ← path.read_text()
+    lines ∈ list[str] ← text.splitlines()
+    for line in lines:
+        fields ∈ list[str] ← line.split("\t")
+        field_count ∈ int ← fields.__len__()
+        if field_count < 2:
+            stop("REQUIREMENT_PROJECTION_CORRUPT")
+        first ∈ str ← fields.__getitem__(0)
+        if first == "obligation":
+            if field_count != 12:
+                stop("REQUIREMENT_PROJECTION_CORRUPT")
+            obligations.append(fields)
+        else:
+            if field_count != 2:
+                stop("REQUIREMENT_PROJECTION_CORRUPT")
+            key ∈ str ← fields.__getitem__(0)
+            if values.__contains__(key):
+                stop("REQUIREMENT_PROJECTION_CORRUPT")
+            values.__setitem__(key, fields.__getitem__(1))
+    schema ∈ str ← values.get("schema", "")
+    if schema != "aici-requirement-projection-v1":
+        stop("REQUIREMENT_PROJECTION_SCHEMA")
+    obligation_count ∈ int ← obligations.__len__()
+    if obligation_count == 0:
+        stop("REQUIREMENT_PROJECTION_INCOMPLETE")
+    return (values, obligations)
+
+def read_material(path ∈ Path) → tuple[dict[str, str], dict[str, dict[str, str]]]:
+    text ∈ str ← path.read_text()
+    lines ∈ list[str] ← text.splitlines()
+    line_count ∈ int ← lines.__len__()
+    if line_count == 0:
+        stop("MATERIAL_CONTEXT_SCHEMA")
+    header ∈ str ← lines.__getitem__(0)
+    if header != "# kitchen-a1-preparation-material-v1":
+        stop("MATERIAL_CONTEXT_SCHEMA")
+    metadata ∈ dict[str, str] ← dict()
+    facts ∈ dict[str, dict[str, str]] ← dict()
+    body ∈ list[str] ← lines[1:]
+    for line in body:
+        fields ∈ list[str] ← line.split("\t")
+        field_count ∈ int ← fields.__len__()
+        first ∈ str ← fields.__getitem__(0)
+        if field_count == 3 and first == "meta":
+            key ∈ str ← fields.__getitem__(1)
+            if metadata.__contains__(key):
+                stop("MATERIAL_CONTEXT_CONFLICT:" + key)
+            metadata.__setitem__(key, fields.__getitem__(2))
+        elif field_count == 8 and first == "fact":
+            name ∈ str ← fields.__getitem__(1)
+            if facts.__contains__(name):
+                stop("MATERIAL_CONTEXT_CONFLICT:" + name)
+            category ∈ str ← fields.__getitem__(2)
+            state ∈ str ← fields.__getitem__(3)
+            value ∈ str ← fields.__getitem__(4)
+            evidence_name ∈ str ← fields.__getitem__(5)
+            evidence_sha ∈ str ← fields.__getitem__(6)
+            revision ∈ str ← fields.__getitem__(7)
+            category_valid ∈ bool ← category == "observed" or category == "derived" or category == "preference" or category == "constraint" or category == "unknown" or category == "deferred"
+            if category_valid == False:
+                stop("MATERIAL_CONTEXT_CATEGORY:" + name)
+            state_valid ∈ bool ← state == "current" or state == "historical" or state == "unknown" or state == "deferred"
+            if state_valid == False:
+                stop("MATERIAL_CONTEXT_STATE:" + name)
+            evidence_required ∈ bool ← category == "observed" or category == "derived"
+            if state == "current" and evidence_required:
+                evidence ∈ Path ← absolute_file(evidence_name, "MATERIAL_EVIDENCE_" + name)
+                exact_sha(evidence_sha, "MATERIAL_EVIDENCE_" + name)
+                if sha256_file(evidence) != evidence_sha:
+                    stop("MATERIAL_EVIDENCE_CHANGED:" + name)
+            else:
+                if evidence_name != "-" or evidence_sha != "-":
+                    stop("MATERIAL_EVIDENCE_UNSUPPORTED:" + name)
+            fact ∈ dict[str, str] ← dict()
+            fact.__setitem__("category", category)
+            fact.__setitem__("state", state)
+            fact.__setitem__("value", value)
+            fact.__setitem__("revision", revision)
+            facts.__setitem__(name, fact)
+        else:
+            stop("MATERIAL_CONTEXT_CORRUPT")
+    selected ∈ str ← metadata.get("selected_action", "")
+    selected_valid ∈ bool ← selected == "source-test" or selected == "freshness-check" or selected == "diagnostic-capture" or selected == "export-copy"
+    if selected_valid == False:
+        stop("MATERIAL_CONTEXT_SELECTED_ACTION")
+    return (metadata, facts)
+
+def supported(fact ∈ dict[str, str]) → bool:
+    category ∈ str ← fact.get("category", "")
+    state ∈ str ← fact.get("state", "")
+    valid_category ∈ bool ← category == "observed" or category == "derived" or category == "constraint"
+    return state == "current" and valid_category
+
+def material_fact(facts ∈ dict[str, dict[str, str]], name ∈ str) → dict[str, str]:
+    return facts.get(name, dict())
+
+def profile_fact(facts ∈ dict[str, dict[str, str]], name ∈ str) → dict[str, str]:
+    return facts.get(name, dict())
+
+def verify_request(
+    request_path ∈ Path,
+    profile_path ∈ Path,
+    requirements_path ∈ Path,
+    source_handoff_path ∈ Path
+) → tuple[dict[str, str], dict[str, str], dict[str, dict[str, str]], str]:
+    request ∈ dict[str, str] ← read_pairs(request_path, "PROFILE_REQUEST")
+    request_schema ∈ str ← request.get("schema", "")
+    if request_schema != "catfood-android-profile-request-v1":
+        stop("PROFILE_REQUEST_SCHEMA")
+    expected ∈ dict[str, str] ← {
+        "consumer": "kitchen-cf-a2-s5",
+        "program": "grease",
+        "canonical_model": "miro-a1",
+        "target": "phone",
+        "aici_requirement_revision": AICI_REQUIREMENT_REVISION,
+        "approved_obligations_candidate_head": APPROVED_OBLIGATIONS_CANDIDATE_HEAD,
+        "approved_obligations_interface_sha256": APPROVED_OBLIGATIONS_INTERFACE_SHA256,
+        "kitchen_source_handoff_revision": KITCHEN_SOURCE_HANDOFF_REVISION,
+        "kitchen_source_handoff_sha256": KITCHEN_SOURCE_HANDOFF_SHA256,
+        "kitchen_contract_schema": "source-handoff-v1",
+        "qualified_ithon_revision": QUALIFIED_ITHON_REVISION,
+        "next_phase": "command-preparation"
+    }
+    expected_keys ∈ list[str] ← [
+        "consumer", "program", "canonical_model", "target",
+        "aici_requirement_revision", "approved_obligations_candidate_head",
+        "approved_obligations_interface_sha256", "kitchen_source_handoff_revision",
+        "kitchen_source_handoff_sha256", "kitchen_contract_schema",
+        "qualified_ithon_revision", "next_phase"
+    ]
+    for key in expected_keys:
+        actual_value ∈ str ← request.get(key, "")
+        expected_value ∈ str ← expected.get(key, "")
+        if actual_value != expected_value:
+            stop("PROFILE_REQUEST_BINDING_CHANGED:" + key)
+    operation ∈ str ← request.get("operation", "")
+    operation_valid ∈ bool ← operation == "diagnostic-base" or operation == "diagnostic-shizuku"
+    if operation_valid == False:
+        stop("PROFILE_REQUEST_OPERATION")
+    approved_sha ∈ str ← request.get("approved_obligations_sha256", "")
+    package_sha ∈ str ← request.get("approved_package_obligation_sha256", "")
+    exact_sha(approved_sha, "APPROVED_OBLIGATIONS")
+    exact_sha(package_sha, "APPROVED_PACKAGE")
+    if sha256_file(source_handoff_path) != KITCHEN_SOURCE_HANDOFF_SHA256:
+        stop("SOURCE_HANDOFF_ADAPTER_CHANGED")
+    profile_sha ∈ str ← sha256_file(profile_path)
+    bound_profile_sha ∈ str ← request.get("profile_projection_sha256", "")
+    if bound_profile_sha != profile_sha:
+        stop("PROFILE_REQUEST_PROJECTION_CHANGED")
+    parsed_profile ∈ tuple[dict[str, str], dict[str, dict[str, str]]] ← read_profile(profile_path)
+    profile ∈ dict[str, str] ← parsed_profile.__getitem__(0)
+    profile_facts ∈ dict[str, dict[str, str]] ← parsed_profile.__getitem__(1)
+    profile_keys ∈ list[str] ← ["canonical_model", "target", "device_instance", "operation", "profile_material_sha256"]
+    for key in profile_keys:
+        request_value ∈ str ← request.get(key, "")
+        profile_value ∈ str ← profile.get(key, "")
+        if request_value != profile_value:
+            stop("PROFILE_REQUEST_VALUE_CHANGED:" + key)
+    requirements_sha ∈ str ← sha256_file(requirements_path)
+    bound_requirements_sha ∈ str ← request.get("requirement_projection_sha256", "")
+    if bound_requirements_sha != requirements_sha:
+        stop("REQUIREMENT_PROJECTION_CHANGED")
+    parsed_requirements ∈ tuple[dict[str, str], list[list[str]]] ← read_requirements(requirements_path)
+    requirements ∈ dict[str, str] ← parsed_requirements.__getitem__(0)
+    obligations ∈ list[list[str]] ← parsed_requirements.__getitem__(1)
+    request_id ∈ str ← request.get("request_id", "")
+    requirement_request_id ∈ str ← requirements.get("request_id", "")
+    if request_id != requirement_request_id:
+        stop("REQUIREMENT_REQUEST_ID_CHANGED")
+    requirement_owner ∈ str ← requirements.get("owner", "")
+    requirement_program ∈ str ← requirements.get("program", "")
+    requirement_target ∈ str ← requirements.get("target", "")
+    if requirement_owner != "dilapidated-shed/grease" or requirement_program != "grease" or requirement_target != "miro-a1":
+        stop("REQUIREMENT_REQUEST_NOT_MAINTAINED")
+    correction ∈ str ← ""
+    for obligation in obligations:
+        axis ∈ str ← obligation.__getitem__(1)
+        decision ∈ str ← obligation.__getitem__(2)
+        requirement_id ∈ str ← obligation.__getitem__(3)
+        source_kind ∈ str ← obligation.__getitem__(4)
+        if axis == "program" and decision == "implementation_eligibility=non-cxx-only":
+            if correction != "":
+                stop("AICI_CORRECTION_CONFLICT")
+            if source_kind != "correction" or requirement_id != "req-grease-non-cxx":
+                stop("AICI_CORRECTION_UNSUPPORTED")
+            correction ← requirement_id
+    if correction == "":
+        stop("AICI_CORRECTION_MISSING")
+    return (request, profile, profile_facts, correction)
+
+def action(status ∈ str, reason ∈ str, postcondition ∈ str) → list[str]:
+    return [status, reason, postcondition]
+
+def prepare_bytes(
+    request_path ∈ Path,
+    profile_path ∈ Path,
+    requirements_path ∈ Path,
+    material_path ∈ Path,
+    mirror_path ∈ Path,
+    source_handoff_path ∈ Path
+) → bytes:
+    request_data ∈ tuple[dict[str, str], dict[str, str], dict[str, dict[str, str]], str] ← verify_request(
+        request_path, profile_path, requirements_path, source_handoff_path
+    )
+    request ∈ dict[str, str] ← request_data.__getitem__(0)
+    profile ∈ dict[str, str] ← request_data.__getitem__(1)
+    profile_facts ∈ dict[str, dict[str, str]] ← request_data.__getitem__(2)
+    correction ∈ str ← request_data.__getitem__(3)
+    material_data ∈ tuple[dict[str, str], dict[str, dict[str, str]]] ← read_material(material_path)
+    metadata ∈ dict[str, str] ← material_data.__getitem__(0)
+    facts ∈ dict[str, dict[str, str]] ← material_data.__getitem__(1)
+
+    mirror_text ∈ str ← mirror_path.read_text()
+    mirror_heading_count ∈ int ← mirror_text.count("# MIRO A1 — Termux")
+    if mirror_heading_count != 1:
+        stop("SYSTEM_MIRROR_CORRUPT")
+    pointer_index ∈ int ← mirror_text.find("tasks/android-diagnostic/prepare.pi")
+    repair_index ∈ int ← mirror_text.find("The previous file repeated")
+    if pointer_index < 0 or repair_index < 0:
+        stop("SYSTEM_MIRROR_POINTER_MISSING")
+
+    host ∈ dict[str, str] ← material_fact(facts, "host")
+    host_value ∈ str ← host.get("value", "")
+    host_ready ∈ bool ← supported(host) and host_value == "miro-a1-termux"
+    host_reason ∈ str ← "READY"
+    if host_ready == False:
+        host_reason ← "TARGET_HOST_MISMATCH"
+
+    checkout ∈ dict[str, str] ← material_fact(facts, "source_checkout_path")
+    source_revision ∈ dict[str, str] ← material_fact(facts, "source_checkout_revision")
+    checkout_value ∈ str ← checkout.get("value", "")
+    checkout_absolute ∈ bool ← checkout_value.startswith("/")
+    source_ready ∈ bool ← host_ready and supported(checkout) and checkout_absolute and supported(source_revision)
+    source_reason ∈ str ← "READY"
+    if host_ready == False:
+        source_reason ← host_reason
+    elif supported(checkout) == False or checkout_absolute == False:
+        source_reason ← "SOURCE_CHECKOUT_PATH_UNRESOLVED"
+    elif supported(source_revision) == False:
+        source_reason ← "SOURCE_CHECKOUT_REVISION_UNRESOLVED"
+    else:
+        exact_revision(source_revision.get("value", ""), "SOURCE_CHECKOUT_REVISION")
+
+    freshness_status ∈ str ← "READY"
+    freshness_reason ∈ str ← "READ_ONLY_REPEAT_ALLOWED"
+    if host_ready == False:
+        freshness_status ← "BLOCKED"
+        freshness_reason ← host_reason
+
+    export_path ∈ dict[str, str] ← material_fact(facts, "shizuku_export_path")
+    export_present ∈ dict[str, str] ← material_fact(facts, "shizuku_export_present")
+    export_value ∈ str ← export_path.get("value", "")
+    export_present_value ∈ str ← export_present.get("value", "")
+    export_absolute ∈ bool ← export_value.startswith("/")
+    export_ready ∈ bool ← supported(export_path) and export_absolute and supported(export_present) and export_present_value == "yes"
+    export_reason ∈ str ← "READY"
+    if supported(export_path) == False:
+        export_reason ← "SHIZUKU_EXPORT_UNSUPPORTED"
+    elif export_absolute == False:
+        export_reason ← "SHIZUKU_EXPORT_PATH_NOT_ABSOLUTE"
+    elif supported(export_present) == False or export_present_value != "yes":
+        export_reason ← "SHIZUKU_EXPORT_MISSING"
+
+    service ∈ dict[str, str] ← profile_fact(profile_facts, "shizuku_readiness")
+    service_state ∈ str ← service.get("state", "")
+    service_scope ∈ str ← service.get("scope", "")
+    service_value ∈ str ← service.get("value", "")
+    service_ready ∈ bool ← service_state == "current" and service_scope == "session" and service_value == "working"
+    service_reason ∈ str ← "READY"
+    profile_operation ∈ str ← profile.get("operation", "")
+    if profile_operation != "diagnostic-shizuku":
+        service_reason ← "SHIZUKU_PROFILE_OPERATION_MISSING"
+    elif service_ready == False:
+        service_reason ← "SHIZUKU_SERVICE_NOT_READY"
+
+    source_action ∈ list[str] ← action("READY", "MATERIAL_BOUND", "temporary source test records its exact scope")
+    if source_ready == False:
+        source_action ← action("BLOCKED", source_reason, "no source-test effect")
+
+    freshness_action ∈ list[str] ← action(freshness_status, freshness_reason, "current facts are observed without mutation")
+
+    diagnostic_action ∈ list[str] ← action("READY", "MATERIAL_BOUND", "bounded diagnostic capture remains observation-only")
+    if host_ready == False:
+        diagnostic_action ← action("BLOCKED", host_reason, "no diagnostic effect")
+    elif export_ready == False:
+        diagnostic_action ← action("BLOCKED", export_reason, "no diagnostic effect")
+    elif service_reason != "READY":
+        diagnostic_action ← action("BLOCKED", service_reason, "no diagnostic effect")
+
+    completed ∈ dict[str, str] ← material_fact(facts, "export_copy_completed")
+    cause ∈ dict[str, str] ← material_fact(facts, "export_copy_cause")
+    completed_value ∈ str ← completed.get("value", "")
+    completed_now ∈ bool ← supported(completed) and completed_value == "yes"
+    cause_value ∈ str ← cause.get("value", "")
+    cause_named ∈ bool ← cause_value != "" and cause_value != "-" and cause_value != "none"
+    cause_present ∈ bool ← supported(cause) and cause_named
+    export_copy_action ∈ list[str] ← action("READY", "MATERIAL_BOUND", "copy postcondition must be checked by the target procedure")
+    if host_ready == False:
+        export_copy_action ← action("BLOCKED", host_reason, "no copy effect")
+    elif export_ready == False:
+        export_copy_action ← action("BLOCKED", export_reason, "no copy effect")
+    elif completed_now and cause_present == False:
+        export_copy_action ← action("BLOCKED", "COMPLETED_MUTATION_REPLAY", "existing completed copy remains unchanged")
+
+    selected ∈ str ← metadata.get("selected_action", "")
+    actions ∈ dict[str, list[str]] ← {
+        "source-test": source_action,
+        "freshness-check": freshness_action,
+        "diagnostic-capture": diagnostic_action,
+        "export-copy": export_copy_action
+    }
+    selected_action ∈ list[str] ← actions.get(selected, ["BLOCKED", "UNKNOWN_ACTION", "no effect"])
+    output_request_id ∈ str ← request.get("request_id", "")
+    output_profile_material ∈ str ← profile.get("profile_material_sha256", "")
+    output_target ∈ str ← profile.get("target", "")
+    output_instance ∈ str ← profile.get("device_instance", "")
+    output_operation ∈ str ← profile.get("operation", "")
+    selected_status ∈ str ← selected_action.__getitem__(0)
+    selected_reason ∈ str ← selected_action.__getitem__(1)
+    source_status ∈ str ← source_action.__getitem__(0)
+    source_output_reason ∈ str ← source_action.__getitem__(1)
+    source_postcondition ∈ str ← source_action.__getitem__(2)
+    freshness_output_status ∈ str ← freshness_action.__getitem__(0)
+    freshness_output_reason ∈ str ← freshness_action.__getitem__(1)
+    freshness_postcondition ∈ str ← freshness_action.__getitem__(2)
+    diagnostic_status ∈ str ← diagnostic_action.__getitem__(0)
+    diagnostic_output_reason ∈ str ← diagnostic_action.__getitem__(1)
+    diagnostic_postcondition ∈ str ← diagnostic_action.__getitem__(2)
+    export_copy_status ∈ str ← export_copy_action.__getitem__(0)
+    export_copy_output_reason ∈ str ← export_copy_action.__getitem__(1)
+    export_copy_postcondition ∈ str ← export_copy_action.__getitem__(2)
+    output_lines ∈ list[str] ← [
+        "schema\tkitchen-a1-preparation-v1",
+        "request_id\t" + output_request_id,
+        "target\t" + output_target,
+        "device_instance\t" + output_instance,
+        "operation\t" + output_operation,
+        "selected_action\t" + selected,
+        "selected_status\t" + selected_status,
+        "selected_reason\t" + selected_reason,
+        "profile_request_sha256\t" + sha256_file(request_path),
+        "context_sha256\t" + sha256_file(material_path),
+        "profile_projection_sha256\t" + sha256_file(profile_path),
+        "profile_material_sha256\t" + output_profile_material,
+        "requirement_projection_sha256\t" + sha256_file(requirements_path),
+        "current_correction_revision\t" + AICI_REQUIREMENT_REVISION,
+        "current_correction_requirement\t" + correction,
+        "system_mirror_sha256\t" + sha256_file(mirror_path),
+        "source_handoff_revision\t" + KITCHEN_SOURCE_HANDOFF_REVISION,
+        "source_handoff_sha256\t" + KITCHEN_SOURCE_HANDOFF_SHA256,
+        "action\tsource-test\t" + source_status + "\t" + source_output_reason + "\t" + source_postcondition,
+        "action\tfreshness-check\t" + freshness_output_status + "\t" + freshness_output_reason + "\t" + freshness_postcondition,
+        "action\tdiagnostic-capture\t" + diagnostic_status + "\t" + diagnostic_output_reason + "\t" + diagnostic_postcondition,
+        "action\texport-copy\t" + export_copy_status + "\t" + export_copy_output_reason + "\t" + export_copy_postcondition
+    ]
+    if export_ready == False:
+        output_lines.append("probe\tPROBE_SHIZUKU_EXPORT\tread-only\tresolve exact export path and presence")
+    if service_reason != "READY":
+        output_lines.append("probe\tPROBE_SHIZUKU_READINESS\tread-only\trefresh authorization and service state")
+    output_lines.append("acceptance\tSOURCE_ONLY\tphysical identity authority service and device behavior remain unverified")
+    joined ∈ str ← "\n".join(output_lines)
+    rendered ∈ str ← joined + "\n"
+    return rendered.encode()
+
+def main() → None:
+    parser ∈ ArgumentParser ← ArgumentParser(description="Prepare or verify exact A1 material-bound actions")
+    parser.add_argument("mode", choices=["prepare", "verify"])
+    parser.add_argument("--profile-request", required=True)
+    parser.add_argument("--profile", required=True)
+    parser.add_argument("--requirements", required=True)
+    parser.add_argument("--material", required=True)
+    parser.add_argument("--mirror", required=True)
+    parser.add_argument("--source-handoff", required=True)
+    parser.add_argument("--output", required=True)
+    args ∈ object ← parser.parse_args()
+    mode ∈ str ← args.mode
+    profile_request_argument ∈ str ← args.profile_request
+    profile_argument ∈ str ← args.profile
+    requirements_argument ∈ str ← args.requirements
+    material_argument ∈ str ← args.material
+    mirror_argument ∈ str ← args.mirror
+    source_handoff_argument ∈ str ← args.source_handoff
+    output_argument ∈ str ← args.output
+    request ∈ Path ← absolute_file(profile_request_argument, "PROFILE_REQUEST")
+    profile ∈ Path ← absolute_file(profile_argument, "PROFILE")
+    requirements ∈ Path ← absolute_file(requirements_argument, "REQUIREMENTS")
+    material ∈ Path ← absolute_file(material_argument, "MATERIAL_CONTEXT")
+    mirror ∈ Path ← absolute_file(mirror_argument, "SYSTEM_MIRROR")
+    source_handoff ∈ Path ← absolute_file(source_handoff_argument, "SOURCE_HANDOFF")
+    output ∈ Path ← Path(output_argument)
+    output_absolute ∈ bool ← output.is_absolute()
+    if output_absolute == False:
+        stop("OUTPUT_PATH_NOT_ABSOLUTE")
+    rendered ∈ bytes ← prepare_bytes(request, profile, requirements, material, mirror, source_handoff)
+    if mode == "prepare":
+        output_exists ∈ bool ← output.exists()
+        if output_exists:
+            stop("OUTPUT_ALREADY_EXISTS")
+        output_parent ∈ Path ← output.parent
+        output_parent_exists ∈ bool ← output_parent.is_dir()
+        if output_parent_exists == False:
+            stop("OUTPUT_PARENT_MISSING")
+        output.write_bytes(rendered)
+        print(rendered.decode(), end="")
+    else:
+        output_is_file ∈ bool ← output.is_file()
+        if output_is_file == False:
+            stop("PREPARATION_RECEIPT_MISSING")
+        observed ∈ bytes ← output.read_bytes()
+        if observed != rendered:
+            stop("PREPARATION_RECEIPT_INVALIDATED")
+        print("PASS exact material still controls preparation")
+
+main()
