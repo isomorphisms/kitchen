@@ -5,6 +5,13 @@ Current source checker: 7.grease. Current generated-program/native checker:
 ick-4.grease. Requirements predate implementation; earlier numbered candidates
 and their actual failures remain preserved.
 
+Repeat consumer builds: 9.grease runs the immutable native recipe twice through
+Ike in fresh roots, verifies unchanged source/runtime material, and compares
+launcher, generated Scheme, compiled Chez and native-library bytes directly.
+It retains per-component hashes and fails on any mismatch. Its requirements and
+unexecuted attempt status are in 9-requirements.md and 9-attempt.md; no
+reproducibility PASS is implied by source presence.
+
 Inputs are absolute paths and identities resolved for the exact build target.
 Source checking accepts spaces/apostrophes/Unicode. Native generation explicitly
 requires an ASCII build root because of Idriç issue 138, while actual program
