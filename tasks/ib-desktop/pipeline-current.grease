@@ -1,0 +1,22 @@
+#!/usr/bin/env grease
+# Fixed environment handoff for FP's whole-argument substitution protocol.
+if (int($#) !== 12) {
+  echo 'requires IB AICI BUNDLE NEW_OUTPUT MATERIAL ICK_SOURCE ARCHIVE_SHA PROBE COMPILER_RECEIPT_SHA RUNTIME_RECEIPT_SHA ABS_GREASE ABS_IKE' >&2
+  exit 2
+}
+var grease = ${11}
+var ike = ${12}
+proc absolute_path (value) {
+  if (not value.startsWith('/') or value.contains(u'\n') or value.contains(u'\r') or value.contains(u'\t')) {
+    echo 'requires an absolute runtime path without record separators' >&2
+    exit 2
+  }
+}
+absolute_path "$grease"
+absolute_path "$ike"
+test -x "$grease"
+test -x "$ike"
+var self = "$(realpath -- "$0")"
+var task = "$(dirname -- "$self")"
+var kitchen = "$(realpath -- "$task/../..")"
+env GREASE="$grease" IKE="$ike" KITCHEN_ROOT="$kitchen" "$grease" "$task/12.grease" run "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}"

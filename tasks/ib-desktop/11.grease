@@ -1,0 +1,245 @@
+#!/usr/bin/env grease
+# Consume the delivered native compiler with authenticated, explicitly relocated receipts.
+if (int($#) !== 11) {
+  echo 'requires MODE ABS_IB ABS_AICI ABS_COMPILER_BUNDLE ABS_NEW_OUTPUT ABS_MATERIAL_ROOT EXPECTED_ICK_SOURCE EXPECTED_ARCHIVE_SHA256 ABS_INDEPENDENT_PROBE EXPECTED_COMPILER_RECEIPT_SHA256 EXPECTED_RUNTIME_RECEIPT_SHA256' >&2
+  exit 2
+}
+var mode = $1
+var ib = $2
+var aici = $3
+var bundle = $4
+var output = $5
+var material = $6
+var expected_source = $7
+var expected_archive = $8
+var probe = $9
+var expected_compiler_receipt = ${10}
+var expected_runtime_receipt = ${11}
+var producer = "$material/build/native-polar"
+var stage = "$producer/stage"
+var recipe_source = "$(realpath -- "$0")"
+
+proc absolute_path (value) {
+  if (not value.startsWith('/') or value.contains(u'\n') or value.contains(u'\r') or value.contains(u'\t')) {
+    echo 'requires an absolute path without record separators' >&2
+    exit 2
+  }
+}
+func native_word (value) {
+  return ("u'" ++ value.replace(u'\\', u'\\\\').replace("'", "\\'") ++ "'")
+}
+absolute_path "$ib"
+absolute_path "$aici"
+absolute_path "$bundle"
+absolute_path "$output"
+absolute_path "$material"
+absolute_path "$stage"
+absolute_path "$probe"
+printf '%s\n' "$expected_source" | grep -Ex '[0-9a-f]{40}' > /dev/null
+printf '%s\n' "$expected_archive" | grep -Ex '[0-9a-f]{64}' > /dev/null
+printf '%s\n' "$expected_compiler_receipt" | grep -Ex '[0-9a-f]{64}' > /dev/null
+printf '%s\n' "$expected_runtime_receipt" | grep -Ex '[0-9a-f]{64}' > /dev/null
+if env LC_ALL=C grep -q '[^ -~]' <<< "$output" {
+  echo 'BLOCKED_UNICODE_BUILD_PATH: compiler 94dfd99bd misquotes non-ASCII Chez compilation paths; select an explicit ASCII build root' >&2
+  exit 2
+}
+test "$(uname -s)" = Linux
+test "$(uname -m)" = x86_64
+if (mode !== 'run' and mode !== 'native') {
+  echo 'mode must be native or run' >&2
+  exit 2
+}
+if test -e "$output" {
+  echo 'refusing an existing native consumer output root' >&2
+  exit 2
+}
+if test -L "$output" {
+  echo 'refusing a linked native consumer output root' >&2
+  exit 2
+}
+var compiler = "$bundle/bin/idric"
+var ick = "$stage/bin/gcc"
+test -x "$compiler"
+test -x "$bundle/bin/idric-env"
+test -s "$bundle/payload.sha256"
+test -x "$ick"
+test -s "$producer/native-stage.tar.gz"
+test "$(cat "$producer/source.txt")" = "$expected_source"
+var archive_line = "$(sha256sum -- "$producer/native-stage.tar.gz")"
+test "$[archive_line.split(' ')[0]]" = "$expected_archive"
+var compiler_receipt_line = "$(sha256sum -- "$producer/compiler.sha256")"
+test "$[compiler_receipt_line.split(' ')[0]]" = "$expected_compiler_receipt"
+var runtime_receipt_line = "$(sha256sum -- "$producer/ick-runtime.sha256")"
+test "$[runtime_receipt_line.split(' ')[0]]" = "$expected_runtime_receipt"
+var probe_line = "$(sha256sum -- "$probe")"
+test "$[probe_line.split(' ')[0]]" = 019c7b6074b012f41c98af3afb92c1ef179b8fbfca03bf3089c20352a9caf470
+cd -- "$material"
+sha256sum --check "$producer/native-stage.sha256" > /dev/null
+sha256sum --check "$producer/compiler.sha256" > /dev/null
+
+cd -- "$bundle"
+sha256sum --check payload.sha256 > /dev/null
+mkdir -p -- "$output"
+sha256sum "$recipe_source" > "$output/recipe.sha256"
+sha256sum "$producer/compiler.sha256" "$producer/ick-runtime.sha256" > "$output/authenticated-receipt-files.sha256"
+env IB_NATIVE_MATERIAL="$material" awk '
+  NF != 2 || length($1) != 64 || $1 ~ /[^0-9a-f]/ { bad=1; next }
+  $2 == "/home/runner/work/ick/ick/build/native-polar/stage/lib/gcc/x86_64-pc-linux-gnu/17.0.0/libgcc.a" {
+    if (gcc_seen++) { bad=1; next }
+    print $1 "  " ENVIRON["IB_NATIVE_MATERIAL"] "/build/native-polar/stage/lib/gcc/x86_64-pc-linux-gnu/17.0.0/libgcc.a"
+    next
+  }
+  $2 == "/home/runner/work/ick/ick/build/native-polar/stage/lib64/libatomic.a" {
+    if (atomic_seen++) { bad=1; next }
+    print $1 "  " ENVIRON["IB_NATIVE_MATERIAL"] "/build/native-polar/stage/lib64/libatomic.a"
+    next
+  }
+  { bad=1 }
+  END {
+    if (bad || gcc_seen != 1 || atomic_seen != 1) {
+      print "unrecognized native runtime receipt path or row" > "/dev/stderr"
+      exit 3
+    }
+  }
+' "$producer/ick-runtime.sha256" > "$output/runtime-mapped.sha256"
+sha256sum --check "$output/runtime-mapped.sha256" > "$output/runtime-mapped-before.txt"
+test "$("$ick" -dumpmachine)" = x86_64-pc-linux-gnu
+
+if (mode === 'run') {
+  var grease = get(ENV, 'GREASE') or ''
+  var ike = get(ENV, 'IKE') or ''
+  var self = "$[ENV.KITCHEN_ROOT]/tasks/ib-desktop/11.grease"
+  var consumer = "$output/consumer"
+  absolute_path "$grease"
+  absolute_path "$ike"
+  absolute_path "$self"
+  var recipe = native_word(grease) ++ " " ++ native_word(self) ++ " native " ++ native_word(ib) ++ " " ++ native_word(aici) ++ " " ++ native_word(bundle) ++ " " ++ native_word(consumer) ++ " " ++ native_word(material) ++ " " ++ native_word(expected_source) ++ " " ++ native_word(expected_archive) ++ " " ++ native_word(probe) ++ " " ++ native_word(expected_compiler_receipt) ++ " " ++ native_word(expected_runtime_receipt)
+  write -- 'native-foundation depends on' "    $recipe" > "$output/Ikefile"
+  sha256sum "$output/Ikefile" > "$output/Ikefile.sha256"
+  var identity_line = "$(cat "$output/Ikefile.sha256")"
+  var identity = identity_line.split(' ')[0]
+  cd -- "$output"
+  env IKE_RECIPE_RUNNER="$grease" IKE_RECEIPT="$output/ike.tsv" IKE_IKEFILE_IDENTITY="sha256:$identity" "$ike" native-foundation
+  sha256sum --check "$output/Ikefile.sha256"
+} elif (mode === 'native') {
+  cd -- "$material"
+  sha256sum --check "$producer/compiler.sha256" > "$output/compiler-before.txt"
+  sha256sum --check "$output/runtime-mapped.sha256" > "$output/runtime-before.txt"
+  sha256sum --check "$producer/native-stage.sha256" > "$output/archive-before.txt"
+  sha256sum "$ick" "$stage/libexec/gcc/x86_64-pc-linux-gnu/17.0.0/cc1" > "$output/ick.sha256"
+  cp -- "$producer/scalar-runtime-packages.tsv" "$output/producer-scalar-runtime-packages.tsv"
+  printf 'source\t%s\narchive_sha256\t%s\ncompiler_receipt_sha256\t%s\nruntime_receipt_sha256\t%s\n' "$expected_source" "$expected_archive" "$expected_compiler_receipt" "$expected_runtime_receipt" > "$output/delivered-material.tsv"
+  uname -srm > "$output/consumer-host.txt"
+  cat /etc/os-release > "$output/consumer-os-release.txt"
+  getconf GNU_LIBC_VERSION > "$output/consumer-libc.txt"
+  dpkg-query -W libc6 libc6-dev > "$output/consumer-scalar-runtime-packages.tsv"
+  ldd "$ick" > "$output/compiler.dependencies.txt"
+  ldd "$stage/libexec/gcc/x86_64-pc-linux-gnu/17.0.0/cc1" > "$output/cc1.dependencies.txt"
+  if grep -q 'not found' "$output/compiler.dependencies.txt" "$output/cc1.dependencies.txt" {
+    echo 'delivered compiler has an unresolved current-host dependency' >&2
+    exit 3
+  }
+  mkdir -- "$output/compiler-qualification"
+  cp -- "$probe" "$output/compiler-qualification/assignment-arrow.c"
+  sha256sum "$probe" > "$output/probe.sha256"
+  for optimization in O0 O2 {
+    "$ick" -fno-link-libatomic -std=c17 -"$optimization" -Wall -Wextra -Werror "$probe" -o "$output/compiler-qualification/glyphs-$optimization"
+    "$output/compiler-qualification/glyphs-$optimization" > "$output/ick-$optimization.txt"
+  }
+  "$ick" -fno-link-libatomic -std=c17 -O2 -Wall -Wextra -Werror -DICK_HOST_WRONG_DIVISION "$probe" -o "$output/compiler-qualification/wrong-division"
+  if "$output/compiler-qualification/wrong-division" > "$output/wrong-division.stdout" 2> "$output/wrong-division.stderr" {
+    echo 'wrong-division compiler control was accepted' >&2
+    exit 3
+  } else {
+    var rejected_status = $?
+    printf '%s\n' "$rejected_status" > "$output/wrong-division.status"
+    test "$rejected_status" = 2
+  }
+  if "$ick" -std=c17 -DICK_HOST_REJECT_PP_DIVISION -c "$probe" -o "$output/compiler-qualification/preprocessor-division.o" > "$output/preprocessor-division.stdout" 2> "$output/preprocessor-division.stderr" {
+    echo 'division glyph was incorrectly admitted to a preprocessor expression' >&2
+    exit 3
+  }
+  grep -F 'not valid in preprocessor expressions' "$output/preprocessor-division.stderr" > "$output/preprocessor-division.rejected.txt"
+  test ! -e "$output/compiler-qualification/preprocessor-division.o"
+  "$ick" --version > "$output/ick-version.txt"
+  "$compiler" --version > "$output/idric-version.txt"
+  sha256sum "$ib/native/linux/ib_platform.c" "$ib/native/linux/ib_platform.h" "$ib/src/IB/Linux/Platform.idric" "$ib/src/IB/LongViewTask.idric" "$ib/src/IB/LongViewLifecycle.idric" "$ib/src/IB/FragmentStore.idric" "$ib/src/IB/Occurrence.idric" "$ib/src/IB/Strand.idric" "$aici/examples/autogenerated/ib-shared-core/SharedCoreOracle.idric" "$aici/examples/autogenerated/ib-shared-core/NativeFoundationOracle.idric" > "$output/input.sha256"
+  git -C "$ib" rev-parse HEAD > "$output/ib-source.txt"
+  git -C "$aici" rev-parse HEAD > "$output/aici-source.txt"
+  find "$ib/src/IB" "$ib/native/linux" "$aici/examples/autogenerated/ib-shared-core" -type f -print0 > "$output/source-paths.nul"
+  sort -z "$output/source-paths.nul" > "$output/source-paths.sorted.nul"
+  xargs -0 sha256sum < "$output/source-paths.sorted.nul" > "$output/source-tree.sha256"
+  mkdir -p -- "$output/source" "$output/library" "$output/mutant"
+  cp -R -- "$ib/src/IB" "$output/source/IB"
+  cp -- "$aici/examples/autogenerated/ib-shared-core/SharedCoreOracle.idric" "$output/source/SharedCoreOracle.idric"
+  cp -- "$aici/examples/autogenerated/ib-shared-core/NativeFoundationOracle.idric" "$output/source/NativeFoundationOracle.idric"
+  "$ick" -fno-link-libatomic -std=c17 -Wall -Wextra -Werror -fPIC -shared -O2 "$ib/native/linux/ib_platform.c" -o "$output/source/libib_linux.so"
+  if "$ick" -fno-link-libatomic -std=c17 -D__ANDROID__ -c "$ib/native/linux/ib_platform.c" -o "$output/android.o" > "$output/android-guard.stdout" 2> "$output/android-guard.stderr" {
+    echo 'Android was incorrectly accepted as Linux desktop' >&2
+    exit 3
+  }
+  grep -F IB_LINUX_X86_64_REQUIRED "$output/android-guard.stderr" > "$output/android-guard.rejected.txt"
+  file "$output/source/libib_linux.so" > "$output/library.abi.txt"
+  readelf -h "$output/source/libib_linux.so" > "$output/library.elf.txt"
+  ldd "$output/source/libib_linux.so" > "$output/library.dependencies.txt"
+  if grep -q 'not found' "$output/library.dependencies.txt" {
+    echo 'unresolved native dependency' >&2
+    exit 3
+  }
+  cd -- "$output/source"
+  "$compiler" --build-dir "$output/ttc" --no-color --codegen chez NativeFoundationOracle.idric -o ib-linux-foundation-check > "$output/generation.stdout" 2> "$output/generation.stderr"
+  if grep -q '^Error:' "$output/generation.stdout" "$output/generation.stderr" {
+    echo 'compiler reported an error despite returning success' >&2
+    exit 3
+  }
+  var executable = "$output/ttc/exec/ib-linux-foundation-check"
+  var app = "$output/ttc/exec/ib-linux-foundation-check_app"
+  test -x "$executable"
+  test -f "$app/libib_linux.so"
+  sha256sum "$executable" "$app/ib-linux-foundation-check.ss" "$app/ib-linux-foundation-check.so" "$app/libib_linux.so" > "$output/executable.sha256"
+  cd -- "$output"
+  pwd > "$output/launch-directory.txt"
+  "$bundle/bin/idric-env" "$executable" > "$output/clean.txt" 2> "$output/clean.stderr"
+  test "$(wc -l < "$output/clean.txt")" = 46
+  test "$(grep -c '=True$' "$output/clean.txt")" = 46
+  cp -- "$app/libib_linux.so" "$output/library/libib_linux.so"
+  sed 's/return (int)bytes;/return (int)bytes + 1;/' "$ib/native/linux/ib_platform.c" > "$output/mutant/ib_platform.c"
+  cp -- "$ib/native/linux/ib_platform.h" "$output/mutant/ib_platform.h"
+  grep -F 'return (int)bytes + 1;' "$output/mutant/ib_platform.c" > "$output/mutation.txt"
+  "$ick" -fno-link-libatomic -std=c17 -Wall -Wextra -Werror -fPIC -shared -O2 "$output/mutant/ib_platform.c" -o "$app/libib_linux.so"
+  if "$bundle/bin/idric-env" "$executable" > "$output/mutant.txt" 2> "$output/mutant.stderr" {
+    echo 'native byte-count mutant was accepted' >&2
+    exit 3
+  }
+  grep -Fx 'native-empty-bytes=False' "$output/mutant.txt" > "$output/mutant.rejected.txt"
+  mv -- "$app/libib_linux.so" "$output/mutant/libib_linux.so"
+  if "$bundle/bin/idric-env" "$executable" > "$output/missing-library.txt" 2> "$output/missing-library.stderr" {
+    echo 'missing native library was accepted' >&2
+    exit 3
+  }
+  grep -F libib_linux "$output/missing-library.stderr" > "$output/missing-library.rejected.txt"
+  cp -- "$output/library/libib_linux.so" "$app/libib_linux.so"
+  "$bundle/bin/idric-env" "$executable" > "$output/recovery.txt" 2> "$output/recovery.stderr"
+  cmp "$output/clean.txt" "$output/recovery.txt"
+  var relocated = "$output/relocated it's 東京"
+  cp -R -- "$output/ttc/exec" "$relocated"
+  "$bundle/bin/idric-env" "$relocated/ib-linux-foundation-check" > "$output/relocated.txt" 2> "$output/relocated.stderr"
+  cmp "$output/clean.txt" "$output/relocated.txt"
+  sha256sum --check "$output/executable.sha256" > "$output/executable-restored.txt"
+  sha256sum --check "$output/input.sha256" > "$output/input-unchanged.txt"
+  sha256sum --check "$output/source-tree.sha256" > "$output/source-tree-unchanged.txt"
+  sha256sum --check "$output/recipe.sha256" > "$output/recipe-unchanged.txt"
+  cd -- "$material"
+  sha256sum --check "$producer/compiler.sha256" > "$output/compiler-unchanged.txt"
+  sha256sum --check "$output/runtime-mapped.sha256" > "$output/runtime-unchanged.txt"
+  sha256sum --check "$output/authenticated-receipt-files.sha256" > "$output/authenticated-receipts-unchanged.txt"
+  sha256sum --check "$producer/native-stage.sha256" > "$output/archive-unchanged.txt"
+  sha256sum --check "$output/probe.sha256" > "$output/probe-unchanged.txt"
+  cd -- "$bundle"
+  sha256sum --check payload.sha256 > "$output/bundle-unchanged.txt"
+  printf 'semantic\tPASS\nlinux-generated-program\tPASS\nnative-ffi\tPASS\nelf-only-application\tNOT_RUN\ngraphical\tNOT_RUN\nnetwork\tNOT_RUN\ndurable-disk-recovery\tNOT_RUN\nandroid-runtime\tNOT_RUN\nphysical-device\tNOT_RUN\n' > "$output/evidence.tsv"
+  echo 'native-foundation=PASS; graphical-desktop=NOT_RUN'
+} else {
+  echo 'mode must be native or run' >&2
+  exit 2
+}

@@ -1,0 +1,25 @@
+#!/usr/bin/env grease
+# FP entrypoint: form environment assignments from the same explicit identities.
+if (int($#) !== 8) {
+  echo 'requires MODE ABS_IB ABS_AICI ABS_BUNDLE ABS_OUTPUT ABS_ICK_STAGE ABS_GREASE ABS_IKE' >&2
+  exit 2
+}
+var mode = $1
+var ib = $2
+var aici = $3
+var bundle = $4
+var output = $5
+var stage = $6
+var grease = $7
+var ike = $8
+var self = "$(realpath -- "$0")"
+var task = "$(dirname -- "$self")"
+var kitchen = "$(realpath -- "$task/../..")"
+if (mode === 'shared') {
+  env GREASE="$grease" IKE="$ike" KITCHEN_ROOT="$kitchen" "$grease" "$task/7.grease" run "$ib" "$aici" "$bundle" "$output"
+} elif (mode === 'native') {
+  env GREASE="$grease" IKE="$ike" KITCHEN_ROOT="$kitchen" "$grease" "$task/8.grease" run "$ib" "$aici" "$bundle" "$output" "$stage"
+} else {
+  echo 'mode must be shared or native' >&2
+  exit 2
+}
