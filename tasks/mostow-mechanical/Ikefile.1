@@ -1,0 +1,14 @@
+host-tests depends on
+    "$MOSTOW_GREASE" "$MOSTOW_ROOT/tools/test-host.grease" "$MOSTOW_ROOT"
+
+host-render depends on host-tests
+    "$MOSTOW_GREASE" "$MOSTOW_ROOT/tools/generate-fixture.grease" "$MOSTOW_ROOT"
+    git -C "$MOSTOW_ROOT" diff --exit-code -- fixtures/sheet_base.inc
+    "$MOSTOW_GREASE" "$MOSTOW_ROOT/tools/render-host.grease" "$MOSTOW_ROOT" "$MOSTOW_ROOT/build/host/zero.ppm" 0 0.45 -0.7
+
+mechanical-tests depends on host-tests
+    "$MOSTOW_GREASE" "$MOSTOW_ROOT/tools/test-mechanical.grease" "$MOSTOW_ROOT"
+
+mechanical-render depends on mechanical-tests
+    "$MOSTOW_GREASE" "$MOSTOW_ROOT/tools/render-host.grease" "$MOSTOW_ROOT" "$MOSTOW_ROOT/build/host/zero.ppm" 0 0.45 -0.7
+    "$MOSTOW_ROOT/build/host/render-mostow" "$MOSTOW_ROOT/build/host/mechanical.ppm" 0 0.45 -0.7 mechanical

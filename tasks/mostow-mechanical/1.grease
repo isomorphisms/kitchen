@@ -1,0 +1,16 @@
+#!/usr/bin/env grease
+var task = ARGV[0]
+var application = ARGV[1]
+var goal = ARGV[2]
+test -d "$task"
+test -f "$task/Ikefile"
+test -d "$application/icky"
+test -x "$ENV.MOSTOW_HOST_COMPILER"
+test -x "$ENV.MOSTOW_GREASE"
+test -x "$ENV.MOSTOW_IKE"
+setglobal ENV.MOSTOW_ROOT = application
+setglobal ENV.IKE_RECIPE_RUNNER = ENV.MOSTOW_GREASE
+setglobal ENV.IKE_IKEFILE_IDENTITY = $(sha256sum "$task/Ikefile" | cut -d ' ' -f 1)
+cd "$task"
+"$ENV.MOSTOW_IKE" "$goal"
+printf '\033[32mPASS\033[0m Mostow Kitchen/Ike stage %s; acceptance boundaries remain separate\n' "$goal"
