@@ -32,6 +32,13 @@ eligible when its own exact host, checkout path, revision, and adapter bindings
 are present. A repeated freshness check is eligible; a completed export copy
 without a new named cause is blocked before effects.
 
+Preparing a receipt creates a new output file exclusively. An existing path,
+including a dangling symlink, must be refused without changing that path or its
+target. Concurrent preparations for the same output may admit only one writer;
+the losing writer must preserve the first receipt.
+The [repair record](../source-handoff/4-output-exclusive-creation.md) preserves
+the original failing cases and current host verification.
+
 The receipt is source/control evidence. It does not establish physical identity,
 current authority, service behavior, target execution, installation, or device
 acceptance.

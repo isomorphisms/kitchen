@@ -33,18 +33,26 @@ Changing the candidate, preparation, selection, evidence, verifier, or verifier
 report changes the qualified bytes. `verify` reruns the owning verifier and
 rejects an old output rather than treating a prior PASS string as execution.
 
+Preparing qualified bytes creates the output exclusively. Existing files and
+symlinks, including dangling symlinks, are refused without changing their bytes
+or targets. Concurrent preparation cannot overwrite another writer's receipt.
+
 Review, syntax, fixture, target and live evidence remain separate. A qualified
 file records source/control qualification only. It does not establish a target
 runtime, physical device, delivery, mailbox operation, installation or live
 effect.
 
 `tests/source-handoff-qualification.pi` supplies a synthetic AICI verifier only
-to stress this Kitchen boundary. Its 13 cases cover exact repeat qualification,
+to stress this Kitchen boundary. Its 17 cases cover exact repeat qualification,
 tested-A/served-B, omitted negative controls, unexecuted controls, wrong copy and
 move roles, stale requirements, wrong scope, always-refusing candidates,
 legitimately excluded scope, newly qualified formatting changes, incomplete
-served units and changed evidence bytes. The fixture is not a released AICI
+served units, changed evidence bytes, existing output preservation, dangling and
+existing-target symlink refusal, and two contending writers. The fixture is not a released AICI
 verifier and grants no authority.
+
+The [exclusive-output repair record](4-output-exclusive-creation.md) preserves
+the demonstrated dangling-symlink failure in both maintained preparers.
 
 The released AICI verifier and approved selections remain A01/A02/A03-owned.
 Eligible runtime/closure remains pending under Cat Food #131 and BC-P02.

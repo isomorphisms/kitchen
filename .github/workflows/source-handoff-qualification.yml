@@ -23,3 +23,8 @@ jobs:
         run: |
           ../ithon/ithon tests/source-handoff-qualification.pi \
             --ithon "$GITHUB_WORKSPACE/ithon/ithon"
+      - name: Run material preparation fixtures
+        working-directory: kitchen
+        run: |
+          ../ithon/ithon tests/android-diagnostic-preparation.pi \
+            --ithon "$GITHUB_WORKSPACE/ithon/ithon"
