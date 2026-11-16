@@ -218,6 +218,55 @@ def main() → None:
             fail("equal material changed preparation")
         checked ← checked + 1
 
+        expect_reject(good_command, unrelated, "OUTPUT_ALREADY_EXISTS", "existing preparation")
+        preserved_bytes ∈ bytes ← good_output.read_bytes()
+        if preserved_bytes != good_bytes:
+            fail("existing preparation bytes changed")
+        checked ← checked + 1
+
+        dangling_target ∈ Path ← temporary.joinpath("absent preparation target.tsv")
+        dangling_output ∈ Path ← temporary.joinpath("dangling preparation.tsv")
+        dangling_output.symlink_to(dangling_target)
+        dangling_command ∈ list[str] ← command(ithon, engine, "prepare", good_request, good_profile, requirements, good_material, mirror, source_handoff, dangling_output)
+        expect_reject(dangling_command, unrelated, "OUTPUT_ALREADY_EXISTS", "dangling preparation symlink")
+        dangling_target_exists ∈ bool ← dangling_target.exists()
+        dangling_output_is_symlink ∈ bool ← dangling_output.is_symlink()
+        if dangling_target_exists or dangling_output_is_symlink == False:
+            fail("dangling preparation symlink or target changed")
+        checked ← checked + 1
+
+        linked_output ∈ Path ← temporary.joinpath("linked preparation.tsv")
+        linked_output.symlink_to(good_output)
+        linked_command ∈ list[str] ← command(ithon, engine, "prepare", good_request, good_profile, requirements, good_material, mirror, source_handoff, linked_output)
+        expect_reject(linked_command, unrelated, "OUTPUT_ALREADY_EXISTS", "existing preparation symlink")
+        preserved_bytes ← good_output.read_bytes()
+        linked_output_is_symlink ∈ bool ← linked_output.is_symlink()
+        if preserved_bytes != good_bytes or linked_output_is_symlink == False:
+            fail("existing preparation symlink or target changed")
+        checked ← checked + 1
+
+        race_output ∈ Path ← temporary.joinpath("contended preparation.tsv")
+        race_command ∈ list[str] ← command(ithon, engine, "prepare", good_request, good_profile, requirements, good_material, mirror, source_handoff, race_output)
+        first_writer ∈ subprocess.Popen ← subprocess.Popen(race_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(unrelated))
+        second_writer ∈ subprocess.Popen ← subprocess.Popen(race_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(unrelated))
+        first_streams ∈ tuple[bytes, bytes] ← first_writer.communicate()
+        second_streams ∈ tuple[bytes, bytes] ← second_writer.communicate()
+        first_code ∈ int ← first_writer.returncode
+        second_code ∈ int ← second_writer.returncode
+        first_won ∈ bool ← first_code == 0 and second_code != 0
+        second_won ∈ bool ← second_code == 0 and first_code != 0
+        if first_won == False and second_won == False:
+            fail("concurrent preparation did not admit exactly one writer")
+        rejected_streams ∈ tuple[bytes, bytes] ← first_streams
+        if first_won:
+            rejected_streams ← second_streams
+        rejected_diagnostic ∈ str ← rejected_streams.__getitem__(1).decode()
+        rejected_index ∈ int ← rejected_diagnostic.find("OUTPUT_ALREADY_EXISTS")
+        preserved_bytes ← race_output.read_bytes()
+        if rejected_index < 0 or preserved_bytes != good_bytes:
+            fail("concurrent preparation failed to preserve the admitted receipt")
+        checked ← checked + 1
+
         alternate_material ∈ Path ← temporary.joinpath("alternate-material.tsv")
         alternate_output ∈ Path ← temporary.joinpath("alternate-output.tsv")
         material(alternate_material, evidence, "diagnostic-capture", "miro-a1-termux", "observed", "current", "/data/data/com.termux/files/home/storage/shared/Shizuku/rish_shizuku.dex", "yes", "no", "none")

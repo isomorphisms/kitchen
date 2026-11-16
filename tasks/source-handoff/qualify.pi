@@ -1,7 +1,7 @@
 """Bind approved requirements and executed controls to final served bytes."""
 from argparse import ArgumentParser
 from pathlib import Path
-from builtins import dict, int, list
+from builtins import FileExistsError, dict, int, list
 import hashlib
 import os
 import shutil
@@ -362,14 +362,15 @@ def main() → None:
         stop("OUTPUT_PATH_NOT_ABSOLUTE")
     rendered ∈ bytes ← qualified_bytes(preparation, selection, evidence, candidate, verifier, ithon)
     if mode == "prepare":
-        output_exists ∈ bool ← output.exists()
-        if output_exists:
-            stop("OUTPUT_ALREADY_EXISTS")
         output_parent ∈ Path ← output.parent
         output_parent_exists ∈ bool ← output_parent.is_dir()
         if output_parent_exists == False:
             stop("OUTPUT_PARENT_MISSING")
-        output.write_bytes(rendered)
+        try:
+            with output.open("xb") as output_stream:
+                output_stream.write(rendered)
+        except FileExistsError:
+            stop("OUTPUT_ALREADY_EXISTS")
         print(rendered.decode(), end="")
     else:
         output_is_file ∈ bool ← output.is_file()

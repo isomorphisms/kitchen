@@ -227,6 +227,64 @@ def main() → None:
             fail("equal material changed qualified preparation")
         checked ← checked + 1
 
+        expect_reject(good_command, outside, "OUTPUT_ALREADY_EXISTS", "existing qualification")
+        preserved_bytes ∈ bytes ← good_output.read_bytes()
+        if preserved_bytes != good_bytes:
+            fail("existing qualification bytes changed")
+        checked ← checked + 1
+
+        dangling_target ∈ Path ← temporary.joinpath("absent qualification target.tsv")
+        dangling_output ∈ Path ← temporary.joinpath("dangling qualification.tsv")
+        dangling_output.symlink_to(dangling_target)
+        dangling_command ∈ list[str] ← command(
+            ithon, qualifier, "prepare", prepared, good_selection,
+            good_evidence, candidate, verifier, dangling_output
+        )
+        expect_reject(dangling_command, outside, "OUTPUT_ALREADY_EXISTS", "dangling qualification symlink")
+        dangling_target_exists ∈ bool ← dangling_target.exists()
+        dangling_output_is_symlink ∈ bool ← dangling_output.is_symlink()
+        if dangling_target_exists or dangling_output_is_symlink == False:
+            fail("dangling qualification symlink or target changed")
+        checked ← checked + 1
+
+        linked_output ∈ Path ← temporary.joinpath("linked qualification.tsv")
+        linked_output.symlink_to(good_output)
+        linked_command ∈ list[str] ← command(
+            ithon, qualifier, "prepare", prepared, good_selection,
+            good_evidence, candidate, verifier, linked_output
+        )
+        expect_reject(linked_command, outside, "OUTPUT_ALREADY_EXISTS", "existing qualification symlink")
+        preserved_bytes ← good_output.read_bytes()
+        linked_output_is_symlink ∈ bool ← linked_output.is_symlink()
+        if preserved_bytes != good_bytes or linked_output_is_symlink == False:
+            fail("existing qualification symlink or target changed")
+        checked ← checked + 1
+
+        race_output ∈ Path ← temporary.joinpath("contended qualification.tsv")
+        race_command ∈ list[str] ← command(
+            ithon, qualifier, "prepare", prepared, good_selection,
+            good_evidence, candidate, verifier, race_output
+        )
+        first_writer ∈ subprocess.Popen ← subprocess.Popen(race_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(outside))
+        second_writer ∈ subprocess.Popen ← subprocess.Popen(race_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(outside))
+        first_streams ∈ tuple[bytes, bytes] ← first_writer.communicate()
+        second_streams ∈ tuple[bytes, bytes] ← second_writer.communicate()
+        first_code ∈ int ← first_writer.returncode
+        second_code ∈ int ← second_writer.returncode
+        first_won ∈ bool ← first_code == 0 and second_code != 0
+        second_won ∈ bool ← second_code == 0 and first_code != 0
+        if first_won == False and second_won == False:
+            fail("concurrent qualification did not admit exactly one writer")
+        rejected_streams ∈ tuple[bytes, bytes] ← first_streams
+        if first_won:
+            rejected_streams ← second_streams
+        rejected_diagnostic ∈ str ← rejected_streams.__getitem__(1).decode()
+        rejected_index ∈ int ← rejected_diagnostic.find("OUTPUT_ALREADY_EXISTS")
+        preserved_bytes ← race_output.read_bytes()
+        if rejected_index < 0 or preserved_bytes != good_bytes:
+            fail("concurrent qualification failed to preserve the admitted receipt")
+        checked ← checked + 1
+
         served_b ∈ Path ← temporary.joinpath("served-b")
         candidate_bytes ∈ bytes ← candidate.read_bytes()
         served_b.write_bytes(candidate_bytes + b"# rewrite\n")
