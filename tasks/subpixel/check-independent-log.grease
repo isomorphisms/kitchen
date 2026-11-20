@@ -1,0 +1,11 @@
+#!/usr/bin/env grease
+set -o errexit -o nounset -o pipefail
+if (int($#) !== 1) { echo 'requires INDEPENDENT_LOG' >&2; exit 2 }
+if ! grep -Fxq 'AICI_SUBPIXEL_PATH_FONT_ACCEPT independent path, glyph masks and six negative controls: PASS' "$1" {
+    echo 'subpixel whole-path/font acceptance missing' >&2
+    exit 1
+}
+if ! grep -Fxq 'AICI_SUBPIXEL_ACCEPT independent 3x3/5x5 rational coverage and four source mutants: PASS' "$1" {
+    echo 'subpixel rational/alpha acceptance missing' >&2
+    exit 1
+}

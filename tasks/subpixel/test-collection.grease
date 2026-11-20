@@ -1,0 +1,23 @@
+#!/usr/bin/env grease
+set -o errexit -o nounset -o pipefail
+var work = "$(mktemp -d)"
+mkdir "$work/source" "$work/preview"
+printf 'panel\n' > "$work/source/font-panel with spaces.ppm"
+printf 'masks\n' > "$work/source/font-masks.tsv"
+printf 'metrics\n' > "$work/source/path-auto.tsv"
+printf 'unrelated\n' > "$work/source/unrelated.txt"
+find "$work/source" -maxdepth 1 -type f \
+    '(' -name '*.ppm' -o -name 'font-*.tsv' -o -name 'path-*.tsv' ')' \
+    -exec cp -t "$work/preview/" '{}' '+'
+cmp "$work/source/font-panel with spaces.ppm" "$work/preview/font-panel with spaces.ppm"
+cmp "$work/source/font-masks.tsv" "$work/preview/font-masks.tsv"
+cmp "$work/source/path-auto.tsv" "$work/preview/path-auto.tsv"
+test ! -e "$work/preview/unrelated.txt"
+printf 'result\tPASS\n' > "$work/result.tsv"
+find "$work" -type f '!' -name result.sha256 -exec sha256sum '{}' '+' > "$work/result.sha256"
+sha256sum -c "$work/result.sha256"
+printf 'changed\n' >> "$work/preview/font-masks.tsv"
+try { sha256sum -c "$work/result.sha256" > "$work/rejected.log" 2>&1 }
+if (_error.code !== 1) { echo 'changed evidence was accepted' >&2; exit 1 }
+grep -Fq 'font-masks.tsv: FAILED' "$work/rejected.log"
+printf '\033[32mPASS\033[0m real evidence collection, spaced names and changed-mask rejection\n'
